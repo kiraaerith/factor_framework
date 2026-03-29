@@ -207,7 +207,7 @@ def main():
                         default=[5, 10, 20],
                         help='调仓频率列表，默认为 5 10 20')
     parser.add_argument('--db', '-d', 
-                        default=r"E:\code_project\factor_eval_result\factor_eval.db",
+                        default=str(Path(__file__).resolve().parent.parent.parent / "factor_eval_result" / "factor_eval.db"),
                         help='数据库路径')
     parser.add_argument('--no-db', action='store_true',
                         help='不使用数据库，仅文件存储')

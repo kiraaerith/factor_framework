@@ -21,7 +21,7 @@ import pandas as pd
 _SCRIPT_DIR = Path(__file__).resolve().parent  # .../etf_factor_framework/scripts/query/
 _PROJECT_ROOT = _SCRIPT_DIR.parent.parent.parent  # .../etf_cross_ml-master/
 _AUTO_DB_PATH = _PROJECT_ROOT / "factor_eval_result" / "factor_eval.db"
-DEFAULT_DB_PATH = str(_AUTO_DB_PATH) if _AUTO_DB_PATH.exists() else r"D:\code_project_v2\factor_eval_result\factor_eval.db"
+DEFAULT_DB_PATH = str(_AUTO_DB_PATH)
 
 
 def query_results(

@@ -41,13 +41,17 @@ class DatabaseStorage:
         db_path: 数据库文件路径
     """
     
-    def __init__(self, db_path: Union[str, Path] = r"E:\code_project\factor_eval_result\factor_eval.db"):
+    _DEFAULT_DB_PATH = Path(__file__).resolve().parent.parent.parent / "factor_eval_result" / "factor_eval.db"
+
+    def __init__(self, db_path: Union[str, Path] = None):
         """
         初始化数据库存储
-        
+
         Args:
-            db_path: 数据库文件路径，默认使用 E:\code_project\factor_eval_result\factor_eval.db
+            db_path: 数据库文件路径，默认使用项目根目录下 factor_eval_result/factor_eval.db
         """
+        if db_path is None:
+            db_path = self._DEFAULT_DB_PATH
         self.db_path = Path(db_path)
         self._ensure_db_directory()
         self._init_database()
@@ -812,11 +816,11 @@ def create_database_storage(db_path: Optional[str] = None) -> DatabaseStorage:
     创建默认的数据库存储器
     
     Args:
-        db_path: 数据库文件路径，默认使用 E:\code_project\factor_eval_result\factor_eval.db
-        
+        db_path: 数据库文件路径，默认使用项目根目录下 factor_eval_result/factor_eval.db
+
     Returns:
         DatabaseStorage: 数据库存储器实例
     """
     if db_path is None:
-        db_path = r"E:\code_project\factor_eval_result\factor_eval.db"
+        db_path = Path(__file__).resolve().parent.parent.parent / "factor_eval_result" / "factor_eval.db"
     return DatabaseStorage(db_path)

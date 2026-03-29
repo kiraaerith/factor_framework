@@ -301,8 +301,8 @@ def main():
     # --- parse config ---
     factor_class_path      = cfg["factor"]["class"]
     factor_direction       = cfg["factor"]["direction"]
-    start_date             = cfg["backtest"]["start_date"]
-    end_date               = cfg["backtest"]["end_date"]
+    start_date             = cfg.get("backtest", {}).get("start_date", "2016-01-01")
+    end_date               = cfg.get("backtest", {}).get("end_date",   "2026-01-01")
     skip_leakage           = cfg.get("backtest", {}).get("skip_leakage_check", False)
     neutralization_methods = cfg["grid"]["neutralization_methods"]
     top_k_list             = cfg["grid"]["top_k_list"]
