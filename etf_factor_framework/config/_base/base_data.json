@@ -1,0 +1,16 @@
+{
+  "_description": "基础数据配置模板",
+  "data": {
+    "csv_path": "../../../etf_rotation_daily.csv",
+    "symbol_col": "symbol",
+    "date_col": "eob",
+    "ohlcv_cols": {
+      "open": "open",
+      "high": "high",
+      "low": "low",
+      "close": "close",
+      "volume": "volume"
+    },
+    "min_non_null_ratio": 0.8
+  }
+}

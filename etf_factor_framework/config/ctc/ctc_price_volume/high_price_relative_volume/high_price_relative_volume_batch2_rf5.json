@@ -1,0 +1,70 @@
+{
+  "name": "HighPriceRelativeVolume-因子测评-batch2-rebalance_freq=5",
+  "version": "1.0",
+  "description": "高价日相对成交量因子测评，批次2（超参6-9），调仓频率5日",
+  "dataset_name": "ETF_Rotation_Daily",
+  "data": {
+    "csv_path": "../../../../etf_rotation_daily.csv",
+    "symbol_col": "symbol",
+    "date_col": "eob",
+    "ohlcv_cols": {
+      "open": "open",
+      "high": "high",
+      "low": "low",
+      "close": "close",
+      "volume": "volume"
+    },
+    "start_date": null,
+    "end_date": null,
+    "min_non_null_ratio": 0.8
+  },
+  "factors": [
+    {
+      "name": "HighPriceRelVol_w40_p0.3",
+      "type": "HighPriceRelativeVolume",
+      "params": {"window": 40, "top_pct": 0.3}
+    },
+    {
+      "name": "HighPriceRelVol_w60_p0.1",
+      "type": "HighPriceRelativeVolume",
+      "params": {"window": 60, "top_pct": 0.1}
+    },
+    {
+      "name": "HighPriceRelVol_w60_p0.2",
+      "type": "HighPriceRelativeVolume",
+      "params": {"window": 60, "top_pct": 0.2}
+    },
+    {
+      "name": "HighPriceRelVol_w60_p0.3",
+      "type": "HighPriceRelativeVolume",
+      "params": {"window": 60, "top_pct": 0.3}
+    }
+  ],
+  "mapper": {
+    "type": "rank_based",
+    "params": {
+      "top_k": 5,
+      "direction": -1,
+      "weight_method": "equal"
+    }
+  },
+  "evaluation": {
+    "forward_period": 5,
+    "periods_per_year": 252,
+    "risk_free_rate": 0.03,
+    "commission_rate": 0.0002,
+    "slippage_rate": 0.0,
+    "delay": 1,
+    "rebalance_freq": 5
+  },
+  "storage": {
+    "storage_mode": "database",
+    "db_path": "E:\\code_project\\factor_eval_result\\factor_eval.db",
+    "base_path": "E:\\code_project\\factor_eval_result\\etf",
+    "save_metrics": true,
+    "save_config": true,
+    "save_report": true,
+    "save_plots": true,
+    "save_comparison": true
+  }
+}

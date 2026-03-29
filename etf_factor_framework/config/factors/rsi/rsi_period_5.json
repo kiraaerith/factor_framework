@@ -1,0 +1,24 @@
+{
+  "_base": ["_base/base_data.json", "_base/base_evaluation.json", "_base/base_storage.json"],
+  "name": "RSI_Period_5",
+  "version": "1.0",
+  "description": "RSI周期5，短线超卖反弹策略",
+  "factors": [
+    {
+      "name": "RSI_5",
+      "type": "RSI",
+      "params": {
+        "period": 5,
+        "field": "close"
+      }
+    }
+  ],
+  "mapper": {
+    "type": "rank_based",
+    "params": {
+      "top_k": 5,
+      "direction": -1,
+      "weight_method": "equal"
+    }
+  }
+}

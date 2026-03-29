@@ -1,0 +1,15 @@
+factor:
+  class: factors.fundamental.profitability.roic.ROIC
+  direction: 1
+
+backtest:
+  start_date: "2013-01-01"
+  end_date: "2025-12-31"
+
+grid:
+  neutralization_methods: [raw, industry, size]
+  top_k_list: [10, 25, 50, 100]
+  rebalance_freqs: [5, 10, 20, 60]
+
+storage:
+  eval_db_path: "../factor_eval_result/factor_eval.db"

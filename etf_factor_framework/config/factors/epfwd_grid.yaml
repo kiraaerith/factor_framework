@@ -1,0 +1,15 @@
+factor:
+  class: factors.fundamental.value.epfwd.EPFWD
+  direction: 1
+
+backtest:
+  start_date: "2016-01-01"
+  end_date: "2025-12-31"
+
+grid:
+  neutralization_methods: [raw, size]
+  top_k_list: [20, 50]
+  rebalance_freqs: [5, 20, 60]
+
+storage:
+  eval_db_path: "../factor_eval_result/factor_eval.db"

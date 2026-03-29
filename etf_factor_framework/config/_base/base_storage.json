@@ -1,0 +1,11 @@
+{
+  "_description": "基础存储配置模板",
+  "storage": {
+    "base_path": "E:\\code_project\\factor_eval_result\\etf",
+    "save_metrics": true,
+    "save_config": true,
+    "save_report": true,
+    "save_plots": true,
+    "save_comparison": true
+  }
+}

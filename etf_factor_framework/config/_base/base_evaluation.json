@@ -1,0 +1,12 @@
+{
+  "_description": "基础评估配置模板",
+  "evaluation": {
+    "forward_period": 5,
+    "periods_per_year": 252,
+    "risk_free_rate": 0.03,
+    "commission_rate": 0.0002,
+    "slippage_rate": 0.0,
+    "delay": 1,
+    "metrics_to_calculate": ["ic", "returns", "risk", "risk_adjusted", "turnover"]
+  }
+}

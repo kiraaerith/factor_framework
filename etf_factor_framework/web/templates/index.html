@@ -1,0 +1,811 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Factor Evaluation Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', 'Microsoft YaHei', -apple-system, sans-serif;
+    background: #f5f0e8;
+    color: #333;
+    padding: 24px 32px;
+    font-size: 15px;
+  }
+  h1 { font-size: 1.6em; margin-bottom: 18px; color: #2a6e5a; }
+
+  /* Controls */
+  .controls {
+    display: flex; gap: 14px; margin-bottom: 18px; align-items: center; flex-wrap: wrap;
+  }
+  .controls input, .controls select {
+    background: #fff; border: 1px solid #c5bfb3; color: #333;
+    padding: 7px 12px; border-radius: 5px; font-family: inherit; font-size: 0.95em;
+  }
+  .controls input { width: 240px; }
+  .controls input:focus, .controls select:focus { outline: none; border-color: #2a6e5a; }
+  .controls select { min-width: 130px; }
+  .controls .stats { margin-left: auto; color: #888; font-size: 0.9em; }
+
+  /* Table */
+  .table-wrap { overflow-x: auto; }
+  table {
+    width: 100%; border-collapse: collapse; font-size: 0.93em;
+  }
+  th, td {
+    padding: 9px 12px; text-align: right; border-bottom: 1px solid #ddd5c8;
+    white-space: nowrap;
+  }
+  th {
+    background: #ebe6dc; color: #666; cursor: pointer; user-select: none;
+    position: sticky; top: 0; z-index: 2; font-weight: 600;
+  }
+  th:hover { color: #2a6e5a; }
+  th.sorted-asc::after { content: ' \25B2'; color: #2a6e5a; }
+  th.sorted-desc::after { content: ' \25BC'; color: #2a6e5a; }
+  td:first-child, th:first-child { text-align: left; }
+  td:nth-child(2), th:nth-child(2) { text-align: left; }
+  tr:hover { background: #ece7dd; }
+  tr.active-row { background: #d9ede5; }
+
+  .factor-link {
+    color: #2a6e5a; cursor: pointer; text-decoration: none; font-weight: 700;
+  }
+  .factor-link:hover { text-decoration: underline; color: #1a5040; }
+
+  .rating-A { color: #2a6e5a; font-weight: bold; }
+  .rating-B { color: #b8860b; font-weight: bold; }
+  .rating-C { color: #c0392b; font-weight: bold; }
+  .negative { color: #c0392b; }
+  .positive { color: #2a6e5a; }
+
+  /* Detail panel */
+  #detail-panel {
+    display: none;
+    margin-top: 22px; padding: 20px;
+    background: #fff; border: 1px solid #d5cfbf; border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  }
+  #detail-panel h2 {
+    font-size: 1.2em; color: #2a6e5a; margin-bottom: 14px;
+  }
+  #detail-panel .close-btn {
+    float: right; cursor: pointer; color: #999; font-size: 1.4em;
+    background: none; border: none;
+  }
+  #detail-panel .close-btn:hover { color: #c0392b; }
+
+  /* Detail table */
+  .detail-table { margin-bottom: 18px; }
+  .detail-table table { font-size: 0.9em; }
+  .detail-table td { border-bottom-color: #ebe6dc; }
+  .detail-table .combo-row { cursor: pointer; transition: background 0.1s; }
+  .detail-table .combo-row:hover { background: #ece7dd; }
+  .detail-table .combo-row.combo-active { background: #d9ede5; font-weight: 600; }
+
+  /* Chart area */
+  .chart-controls {
+    display: flex; gap: 12px; margin-bottom: 12px; align-items: center; flex-wrap: wrap;
+  }
+  .chart-controls select {
+    background: #fff; border: 1px solid #c5bfb3; color: #333;
+    padding: 6px 10px; border-radius: 5px; font-family: inherit; font-size: 0.93em;
+  }
+  .chart-controls label { color: #666; font-size: 0.93em; }
+  #chart-container { width: 100%; height: 450px; }
+  .no-curve-msg { color: #999; font-style: italic; padding: 20px 0; }
+
+  /* Loading */
+  .loading { color: #999; text-align: center; padding: 40px; }
+
+  /* File buttons */
+  .file-btn {
+    background: #ebe6dc; border: 1px solid #c5bfb3; color: #555;
+    padding: 3px 9px; border-radius: 4px; cursor: pointer;
+    font-family: inherit; font-size: 0.85em; margin-right: 4px;
+  }
+  .file-btn:hover { background: #d9ede5; color: #2a6e5a; border-color: #2a6e5a; }
+
+  /* File viewer modal */
+  #file-modal {
+    display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.35); z-index: 100;
+    justify-content: center; align-items: center;
+  }
+  #file-modal.active { display: flex; }
+  #file-modal-inner {
+    background: #faf8f4; border: 1px solid #c5bfb3; border-radius: 10px;
+    width: 82%; max-width: 960px; max-height: 85vh;
+    display: flex; flex-direction: column;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+  }
+  #file-modal-header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 14px 20px; border-bottom: 1px solid #ddd5c8;
+  }
+  #file-modal-header h3 { font-size: 1.05em; color: #2a6e5a; margin: 0; }
+  #file-modal-path { font-size: 0.82em; color: #999; margin-left: 14px; }
+  #file-modal-close {
+    background: none; border: none; color: #999; font-size: 1.5em; cursor: pointer;
+  }
+  #file-modal-close:hover { color: #c0392b; }
+  #file-modal-body {
+    padding: 20px; overflow: auto; flex: 1;
+  }
+  #file-modal-body pre {
+    margin: 0; white-space: pre-wrap; word-wrap: break-word;
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-size: 0.88em; line-height: 1.6; color: #444;
+    background: #f0ece4; padding: 16px; border-radius: 6px;
+  }
+
+  /* Tabs */
+  .tabs {
+    display: flex; gap: 0; margin-bottom: 20px; border-bottom: 2px solid #d5cfbf;
+  }
+  .tab-btn {
+    padding: 10px 24px; cursor: pointer; font-size: 1em; font-family: inherit;
+    background: none; border: none; border-bottom: 3px solid transparent;
+    color: #888; font-weight: 600; transition: all 0.15s;
+  }
+  .tab-btn:hover { color: #2a6e5a; }
+  .tab-btn.active {
+    color: #2a6e5a; border-bottom-color: #2a6e5a;
+  }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* Status badges */
+  .status-badge {
+    display: inline-block; padding: 2px 8px; border-radius: 10px;
+    font-size: 0.82em; font-weight: 600;
+  }
+  .status-completed { background: #d9ede5; color: #2a6e5a; }
+  .status-pending { background: #f0ece4; color: #999; }
+  .status-data_missing { background: #fde8e8; color: #c0392b; }
+  .status-step_failed { background: #fde8e8; color: #c0392b; }
+  .status-leakage_failed { background: #fde8e8; color: #c0392b; }
+  .status-running { background: #e8f0fd; color: #2a5ea6; }
+
+  /* Index controls */
+  .index-controls {
+    display: flex; gap: 14px; margin-bottom: 18px; align-items: center; flex-wrap: wrap;
+  }
+  .index-controls input, .index-controls select {
+    background: #fff; border: 1px solid #c5bfb3; color: #333;
+    padding: 7px 12px; border-radius: 5px; font-family: inherit; font-size: 0.95em;
+  }
+  .index-controls input { width: 240px; }
+  .index-controls input:focus, .index-controls select:focus { outline: none; border-color: #2a6e5a; }
+  .index-controls select { min-width: 130px; }
+  .index-controls .stats { margin-left: auto; color: #888; font-size: 0.9em; }
+</style>
+</head>
+<body>
+
+<h1>Factor Evaluation Dashboard</h1>
+
+<div class="tabs">
+  <button class="tab-btn active" onclick="switchTab('index')">Factor Index</button>
+  <button class="tab-btn" onclick="switchTab('results')">Evaluation Results</button>
+</div>
+
+<!-- ═══ Tab 1: Factor Index ═══ -->
+<div id="tab-index" class="tab-content active">
+  <div class="index-controls">
+    <input type="text" id="idx-search" placeholder="Search factor name...">
+    <select id="idx-filter-category">
+      <option value="">All Categories</option>
+    </select>
+    <select id="idx-filter-status">
+      <option value="">All Status</option>
+      <option value="completed">Completed</option>
+      <option value="pending">Pending</option>
+      <option value="data_missing">Data Missing</option>
+      <option value="step_failed">Step Failed</option>
+    </select>
+    <div class="stats" id="idx-stats"></div>
+  </div>
+  <div class="table-wrap">
+    <table id="index-table">
+      <thead>
+        <tr>
+          <th data-key="factor_id" data-table="index">Factor ID</th>
+          <th data-key="factor_name" data-table="index">Name</th>
+          <th data-key="category" data-table="index">Category</th>
+          <th data-key="direction" data-table="index">Direction</th>
+          <th data-key="status" data-table="index">Status</th>
+          <th data-key="best_rank_icir" data-table="index">Rank ICIR</th>
+          <th data-key="best_sharpe" data-table="index">Sharpe</th>
+          <th data-key="formula_brief" data-table="index">Formula</th>
+          <th data-key="last_updated" data-table="index">Updated</th>
+          <th>Files</th>
+        </tr>
+      </thead>
+      <tbody id="index-body"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ═══ Tab 2: Evaluation Results ═══ -->
+<div id="tab-results" class="tab-content">
+  <div class="controls">
+    <input type="text" id="search" placeholder="Search factor name...">
+    <select id="filter-category">
+      <option value="">All Categories</option>
+    </select>
+    <select id="filter-rating">
+      <option value="">All Ratings</option>
+      <option value="A">A (|Rank ICIR| ≥ 1.0)</option>
+      <option value="B">B (0.5 ~ 1.0)</option>
+      <option value="C">C (&lt; 0.5)</option>
+    </select>
+    <div class="stats" id="stats"></div>
+  </div>
+
+  <div class="table-wrap">
+    <table id="summary-table">
+      <thead>
+        <tr>
+          <th data-key="factor_id" data-table="summary">Factor</th>
+          <th data-key="category" data-table="summary">Category</th>
+          <th data-key="rating" data-table="summary">Rating</th>
+          <th data-key="best_rank_icir" data-table="summary" data-default-sort="true">Rank ICIR</th>
+          <th data-key="best_icir" data-table="summary">ICIR</th>
+          <th data-key="best_sharpe" data-table="summary">Sharpe</th>
+          <th data-key="best_annualized_return" data-table="summary">Ann. Return</th>
+          <th data-key="best_max_drawdown" data-table="summary">Max DD</th>
+          <th data-key="best_combo" data-table="summary">Best Combo</th>
+          <th>Files</th>
+        </tr>
+      </thead>
+      <tbody id="summary-body"></tbody>
+    </table>
+  </div>
+
+  <div id="detail-panel">
+    <button class="close-btn" onclick="closeDetail()">&times;</button>
+    <h2 id="detail-title"></h2>
+    <div class="detail-table" id="detail-table-wrap"></div>
+    <div class="chart-controls">
+      <label>Curve:</label>
+      <select id="curve-select"></select>
+    </div>
+    <div id="chart-container"></div>
+    <div class="no-curve-msg" id="no-curve-msg" style="display:none;">No return curve data available for this factor.</div>
+  </div>
+</div>
+
+<div id="file-modal" onclick="if(event.target===this)closeFileModal()">
+  <div id="file-modal-inner">
+    <div id="file-modal-header">
+      <div><h3 id="file-modal-title"></h3><span id="file-modal-path"></span></div>
+      <button id="file-modal-close" onclick="closeFileModal()">&times;</button>
+    </div>
+    <div id="file-modal-body"><pre id="file-modal-content"></pre></div>
+  </div>
+</div>
+
+<script>
+let allFactors = [];
+let allIndexFactors = [];
+let sortKey = 'best_rank_icir';
+let sortDir = 'desc';
+let idxSortKey = 'factor_id';
+let idxSortDir = 'asc';
+let chart = null;
+let currentCurveData = null;
+let summaryLoaded = false;
+
+// ── Tab switching ──
+function switchTab(tab) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  document.getElementById('tab-' + tab).classList.add('active');
+  document.querySelectorAll('.tab-btn').forEach(b => {
+    if ((tab === 'index' && b.textContent.includes('Index')) ||
+        (tab === 'results' && b.textContent.includes('Results'))) {
+      b.classList.add('active');
+    }
+  });
+  // Lazy load results tab
+  if (tab === 'results' && !summaryLoaded) {
+    loadSummary();
+  }
+  // Resize chart if visible
+  if (tab === 'results' && chart) {
+    setTimeout(() => chart.resize(), 100);
+  }
+}
+
+// ── Load factor index ──
+async function loadFactorIndex() {
+  const resp = await fetch('/api/factor_index');
+  const data = await resp.json();
+  allIndexFactors = data.factors;
+
+  // Populate category filter
+  const cats = [...new Set(allIndexFactors.map(f => f.category).filter(Boolean))].sort();
+  const sel = document.getElementById('idx-filter-category');
+  cats.forEach(c => {
+    const opt = document.createElement('option');
+    opt.value = c; opt.textContent = c;
+    sel.appendChild(opt);
+  });
+
+  renderIndexTable();
+}
+
+// ── Render factor index ──
+function renderIndexTable() {
+  const search = document.getElementById('idx-search').value.toLowerCase();
+  const catFilter = document.getElementById('idx-filter-category').value;
+  const statusFilter = document.getElementById('idx-filter-status').value;
+
+  let filtered = allIndexFactors.filter(f => {
+    if (search && !f.factor_id.toLowerCase().includes(search) && !f.factor_name.includes(search)) return false;
+    if (catFilter && f.category !== catFilter) return false;
+    if (statusFilter && f.status !== statusFilter) return false;
+    return true;
+  });
+
+  filtered.sort((a, b) => {
+    let va = a[idxSortKey], vb = b[idxSortKey];
+    if (va == null) va = idxSortDir === 'desc' ? -Infinity : Infinity;
+    if (vb == null) vb = idxSortDir === 'desc' ? -Infinity : Infinity;
+    if (typeof va === 'string') {
+      return idxSortDir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
+    }
+    return idxSortDir === 'asc' ? va - vb : vb - va;
+  });
+
+  // Stats
+  const statusCounts = {};
+  allIndexFactors.forEach(f => { statusCounts[f.status] = (statusCounts[f.status] || 0) + 1; });
+  const statsStr = Object.entries(statusCounts).map(([k,v]) => `${k}: ${v}`).join(' | ');
+  document.getElementById('idx-stats').textContent = `${filtered.length} / ${allIndexFactors.length} factors | ${statsStr}`;
+
+  const tbody = document.getElementById('index-body');
+  tbody.innerHTML = '';
+  filtered.forEach(f => {
+    const tr = document.createElement('tr');
+    const ricir = f.best_rank_icir != null ? fmtNum(f.best_rank_icir, 2) : '-';
+    const sharpe = f.best_sharpe != null ? fmtNum(f.best_sharpe, 2) : '-';
+    const updated = f.last_updated ? f.last_updated.substring(0, 16).replace('T', ' ') : '-';
+    const hasSpec = f.spec_path ? true : false;
+    const hasCode = f.code_path ? true : false;
+    tr.innerHTML = `
+      <td style="text-align:left; font-weight:600;">${f.factor_id}</td>
+      <td style="text-align:left">${f.factor_name || '-'}</td>
+      <td style="text-align:left">${f.category || '-'}</td>
+      <td>${f.direction || '-'}</td>
+      <td><span class="status-badge status-${f.status}">${f.status}</span></td>
+      <td>${ricir}</td>
+      <td>${sharpe}</td>
+      <td style="text-align:left; max-width:200px; overflow:hidden; text-overflow:ellipsis;">${f.formula_brief || '-'}</td>
+      <td>${updated}</td>
+      <td style="text-align:center">
+        ${hasSpec ? `<button class="file-btn" onclick="openFile('${f.factor_id}','spec')">Spec</button>` : ''}
+        ${hasCode ? `<button class="file-btn" onclick="openFile('${f.factor_id}','code')">Code</button>` : ''}
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  // Sort indicators
+  document.querySelectorAll('#index-table th').forEach(th => {
+    th.classList.remove('sorted-asc', 'sorted-desc');
+    if (th.dataset.key === idxSortKey && th.dataset.table === 'index') {
+      th.classList.add(idxSortDir === 'asc' ? 'sorted-asc' : 'sorted-desc');
+    }
+  });
+}
+
+// Index filter handlers
+document.getElementById('idx-search').addEventListener('input', renderIndexTable);
+document.getElementById('idx-filter-category').addEventListener('change', renderIndexTable);
+document.getElementById('idx-filter-status').addEventListener('change', renderIndexTable);
+
+// ── Load summary (results tab) ──
+async function loadSummary() {
+  const resp = await fetch('/api/summary');
+  const data = await resp.json();
+  allFactors = data.factors;
+  summaryLoaded = true;
+
+  // Populate category filter
+  const cats = [...new Set(allFactors.map(f => f.category).filter(Boolean))].sort();
+  const sel = document.getElementById('filter-category');
+  cats.forEach(c => {
+    const opt = document.createElement('option');
+    opt.value = c; opt.textContent = c;
+    sel.appendChild(opt);
+  });
+
+  renderTable();
+}
+
+// ── Render table ──
+function renderTable() {
+  const search = document.getElementById('search').value.toLowerCase();
+  const catFilter = document.getElementById('filter-category').value;
+  const ratingFilter = document.getElementById('filter-rating').value;
+
+  let filtered = allFactors.filter(f => {
+    if (search && !f.factor_id.toLowerCase().includes(search)) return false;
+    if (catFilter && f.category !== catFilter) return false;
+    if (ratingFilter && f.rating !== ratingFilter) return false;
+    return true;
+  });
+
+  // Sort
+  filtered.sort((a, b) => {
+    let va = a[sortKey], vb = b[sortKey];
+    if (sortKey === 'best_rank_icir' || sortKey === 'best_icir') {
+      va = Math.abs(va || 0); vb = Math.abs(vb || 0);
+    }
+    if (va == null) va = sortDir === 'desc' ? -Infinity : Infinity;
+    if (vb == null) vb = sortDir === 'desc' ? -Infinity : Infinity;
+    if (typeof va === 'string') {
+      return sortDir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
+    }
+    return sortDir === 'asc' ? va - vb : vb - va;
+  });
+
+  // Stats
+  document.getElementById('stats').textContent =
+    `${filtered.length} / ${allFactors.length} factors`;
+
+  // Render rows
+  const tbody = document.getElementById('summary-body');
+  tbody.innerHTML = '';
+  filtered.forEach(f => {
+    const tr = document.createElement('tr');
+    tr.dataset.factorId = f.factor_id;
+    tr.innerHTML = `
+      <td><a class="factor-link" onclick="openDetail('${f.factor_id}')">${f.factor_id}</a></td>
+      <td>${f.category || '-'}</td>
+      <td><span class="rating-${f.rating}">${f.rating}</span></td>
+      <td>${fmtNum(f.best_rank_icir, 3)}</td>
+      <td>${fmtNum(f.best_icir, 3)}</td>
+      <td>${fmtNum(f.best_sharpe, 3)}</td>
+      <td class="${(f.best_annualized_return || 0) >= 0 ? 'positive' : 'negative'}">${fmtPct(f.best_annualized_return)}</td>
+      <td class="negative">${fmtPct(f.best_max_drawdown)}</td>
+      <td>${f.best_combo || '-'}</td>
+      <td style="text-align:center">
+        <button class="file-btn" onclick="event.stopPropagation();openFile('${f.factor_id}','spec')">Spec</button>
+        <button class="file-btn" onclick="event.stopPropagation();openFile('${f.factor_id}','code')">Code</button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  // Update sort indicators
+  document.querySelectorAll('#summary-table th').forEach(th => {
+    th.classList.remove('sorted-asc', 'sorted-desc');
+    if (th.dataset.key === sortKey) {
+      th.classList.add(sortDir === 'asc' ? 'sorted-asc' : 'sorted-desc');
+    }
+  });
+}
+
+// ── Format helpers ──
+function fmtNum(v, digits) {
+  if (v == null) return '-';
+  return v.toFixed(digits);
+}
+function fmtPct(v) {
+  if (v == null) return '-';
+  return (v * 100).toFixed(2) + '%';
+}
+
+// ── Sort handlers ──
+document.querySelectorAll('#summary-table th[data-table="summary"]').forEach(th => {
+  th.addEventListener('click', () => {
+    const key = th.dataset.key;
+    if (!key) return;
+    if (sortKey === key) { sortDir = sortDir === 'desc' ? 'asc' : 'desc'; }
+    else { sortKey = key; sortDir = 'desc'; }
+    renderTable();
+  });
+});
+document.querySelectorAll('#index-table th[data-table="index"]').forEach(th => {
+  th.addEventListener('click', () => {
+    const key = th.dataset.key;
+    if (!key) return;
+    if (idxSortKey === key) { idxSortDir = idxSortDir === 'desc' ? 'asc' : 'desc'; }
+    else { idxSortKey = key; idxSortDir = 'desc'; }
+    renderIndexTable();
+  });
+});
+
+// ── Filter handlers ──
+document.getElementById('search').addEventListener('input', renderTable);
+document.getElementById('filter-category').addEventListener('change', renderTable);
+document.getElementById('filter-rating').addEventListener('change', renderTable);
+
+// ── Detail panel ──
+async function openDetail(factorId) {
+  const panel = document.getElementById('detail-panel');
+  panel.style.display = 'block';
+  document.getElementById('detail-title').textContent = factorId;
+  document.getElementById('no-curve-msg').style.display = 'none';
+
+  // Highlight row
+  document.querySelectorAll('#summary-body tr').forEach(tr => {
+    tr.classList.toggle('active-row', tr.dataset.factorId === factorId);
+  });
+
+  // Load details
+  const detResp = await fetch(`/api/details/${factorId}`);
+  const detData = await detResp.json();
+  renderDetailTable(detData.results);
+
+  // Load curves
+  const curveResp = await fetch(`/api/curve/${factorId}`);
+  const curveData = await curveResp.json();
+  currentCurveData = curveData;
+
+  if (curveData.combos && curveData.combos.length > 0) {
+    populateCurveSelect(curveData.combos);
+    // Show best combo's curve and highlight matching table row
+    const bestCombo = curveData.combos[0];
+    renderChart(bestCombo);
+    const bestKey = `${bestCombo.neutralization}_top${bestCombo.top_k}_freq${bestCombo.rebalance_freq}`;
+    document.querySelectorAll('#detail-combo-table .combo-row').forEach(r => {
+      r.classList.toggle('combo-active', r.dataset.comboKey === bestKey);
+    });
+    document.getElementById('chart-container').style.display = 'block';
+    document.getElementById('no-curve-msg').style.display = 'none';
+  } else {
+    document.getElementById('chart-container').style.display = 'none';
+    document.getElementById('no-curve-msg').style.display = 'block';
+  }
+
+  panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function closeDetail() {
+  document.getElementById('detail-panel').style.display = 'none';
+  document.querySelectorAll('#summary-body tr').forEach(tr => tr.classList.remove('active-row'));
+}
+
+function renderDetailTable(results) {
+  const wrap = document.getElementById('detail-table-wrap');
+  if (!results || results.length === 0) {
+    wrap.innerHTML = '<p style="color:#888;">No detail data.</p>';
+    return;
+  }
+  const bestId = results[0].id; // first is best (sorted by rank_icir desc)
+  let html = `<table id="detail-combo-table">
+    <thead><tr>
+      <th style="text-align:left">Neutralization</th>
+      <th>Top K</th><th>Freq</th>
+      <th>Rank ICIR</th><th>ICIR</th><th>Rank IC</th><th>IC</th>
+      <th>Sharpe</th><th>Ann. Return</th><th>Max DD</th><th>Calmar</th>
+    </tr></thead><tbody>`;
+
+  results.forEach((r, i) => {
+    const isBest = (i === 0);
+    const comboKey = `${r.neutralization}_top${r.top_k}_freq${r.rebalance_freq}`;
+    html += `<tr class="combo-row ${isBest ? 'combo-active' : ''}" data-combo-key="${comboKey}" onclick="selectComboRow(this, '${comboKey}')">
+      <td style="text-align:left">${r.neutralization}</td>
+      <td>${r.top_k}</td>
+      <td>${r.rebalance_freq}</td>
+      <td>${fmtNum(r.rank_icir, 3)}</td>
+      <td>${fmtNum(r.icir, 3)}</td>
+      <td>${fmtNum(r.rank_ic, 4)}</td>
+      <td>${fmtNum(r.ic, 4)}</td>
+      <td>${fmtNum(r.sharpe, 3)}</td>
+      <td class="${(r.annualized_return || 0) >= 0 ? 'positive' : 'negative'}">${fmtPct(r.annualized_return)}</td>
+      <td class="negative">${fmtPct(r.max_drawdown)}</td>
+      <td>${fmtNum(r.calmar, 3)}</td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+}
+
+function selectComboRow(rowEl, comboKey) {
+  // Highlight selected row
+  document.querySelectorAll('#detail-combo-table .combo-row').forEach(r => r.classList.remove('combo-active'));
+  rowEl.classList.add('combo-active');
+
+  // Find matching curve and render
+  if (!currentCurveData || !currentCurveData.combos) return;
+  const combo = currentCurveData.combos.find(c =>
+    `${c.neutralization}_top${c.top_k}_freq${c.rebalance_freq}` === comboKey
+  );
+  if (combo) {
+    // Sync dropdown
+    const sel = document.getElementById('curve-select');
+    for (let i = 0; i < sel.options.length; i++) {
+      if (parseInt(sel.options[i].value) === currentCurveData.combos.indexOf(combo)) {
+        sel.selectedIndex = i; break;
+      }
+    }
+    renderChart(combo);
+  }
+}
+
+function populateCurveSelect(combos) {
+  const sel = document.getElementById('curve-select');
+  sel.innerHTML = '';
+  combos.forEach((c, i) => {
+    const opt = document.createElement('option');
+    opt.value = i;
+    opt.textContent = `${c.label}  (RICIR=${fmtNum(c.rank_icir, 2)}, Sharpe=${fmtNum(c.sharpe, 2)})`;
+    sel.appendChild(opt);
+  });
+}
+
+document.getElementById('curve-select').addEventListener('change', (e) => {
+  if (currentCurveData && currentCurveData.combos) {
+    const combo = currentCurveData.combos[parseInt(e.target.value)];
+    renderChart(combo);
+    // Sync table row highlight
+    const comboKey = `${combo.neutralization}_top${combo.top_k}_freq${combo.rebalance_freq}`;
+    document.querySelectorAll('#detail-combo-table .combo-row').forEach(r => {
+      r.classList.toggle('combo-active', r.dataset.comboKey === comboKey);
+    });
+  }
+});
+
+// ── ECharts ──
+function renderChart(combo) {
+  const container = document.getElementById('chart-container');
+  if (!chart) {
+    chart = echarts.init(container);
+    window.addEventListener('resize', () => chart.resize());
+  }
+
+  const pctReturns = combo.cumulative_returns.map(v => (v * 100).toFixed(2));
+
+  // Compute drawdown from cumulative returns: dd = (nav - peak) / peak
+  const drawdown = [];
+  let peak = -Infinity;
+  for (let i = 0; i < combo.cumulative_returns.length; i++) {
+    const nav = 1.0 + combo.cumulative_returns[i];
+    if (nav > peak) peak = nav;
+    const dd = ((nav - peak) / peak) * 100; // in percent, always <= 0
+    drawdown.push(dd.toFixed(2));
+  }
+
+  chart.setOption({
+    backgroundColor: '#fff',
+    title: {
+      text: `${combo.label} — Cumulative Return & Drawdown`,
+      textStyle: { fontSize: 14, color: '#555' },
+      left: 'center', top: 5,
+    },
+    tooltip: {
+      trigger: 'axis',
+      formatter: function(params) {
+        let html = params[0].axisValue;
+        params.forEach(p => {
+          const marker = p.marker;
+          if (p.seriesName === 'Return') {
+            html += `<br/>${marker} Return: <b>${p.value}%</b>`;
+          } else {
+            html += `<br/>${marker} Drawdown: <b>${p.value}%</b>`;
+          }
+        });
+        return html;
+      },
+    },
+    legend: {
+      data: ['Return', 'Drawdown'],
+      top: 28, textStyle: { fontSize: 12, color: '#666' },
+    },
+    grid: { left: 65, right: 65, top: 60, bottom: 60 },
+    xAxis: {
+      type: 'category',
+      data: combo.dates,
+      axisLabel: { fontSize: 11, color: '#888' },
+      axisLine: { lineStyle: { color: '#ccc' } },
+    },
+    yAxis: [
+      {
+        type: 'value',
+        name: 'Return',
+        nameTextStyle: { color: '#2a6e5a', fontSize: 12 },
+        axisLabel: {
+          fontSize: 11, color: '#2a6e5a',
+          formatter: '{value}%',
+        },
+        splitLine: { lineStyle: { color: '#e8e2d8' } },
+      },
+      {
+        type: 'value',
+        name: 'Drawdown',
+        nameTextStyle: { color: '#c0392b', fontSize: 12 },
+        axisLabel: {
+          fontSize: 11, color: '#c0392b',
+          formatter: '{value}%',
+        },
+        splitLine: { show: false },
+      },
+    ],
+    dataZoom: [
+      { type: 'inside', start: 0, end: 100 },
+      { type: 'slider', start: 0, end: 100, height: 22, bottom: 10,
+        textStyle: { color: '#888' } },
+    ],
+    series: [
+      {
+        name: 'Return',
+        type: 'line',
+        yAxisIndex: 0,
+        data: pctReturns,
+        smooth: false,
+        symbol: 'none',
+        lineStyle: { width: 2, color: '#2a6e5a' },
+        areaStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: 'rgba(42,110,90,0.2)' },
+            { offset: 1, color: 'rgba(42,110,90,0.02)' },
+          ]),
+        },
+      },
+      {
+        name: 'Drawdown',
+        type: 'line',
+        yAxisIndex: 1,
+        data: drawdown,
+        smooth: false,
+        symbol: 'none',
+        lineStyle: { width: 1, color: 'rgba(192,57,43,0.45)' },
+        areaStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: 'rgba(192,57,43,0.06)' },
+            { offset: 1, color: 'rgba(192,57,43,0.01)' },
+          ]),
+        },
+      },
+    ],
+  }, true);
+}
+
+// ── File viewer ──
+async function openFile(factorId, fileType) {
+  const modal = document.getElementById('file-modal');
+  const title = document.getElementById('file-modal-title');
+  const path = document.getElementById('file-modal-path');
+  const content = document.getElementById('file-modal-content');
+
+  title.textContent = `${factorId} — ${fileType === 'spec' ? 'Spec' : 'Code'}`;
+  path.textContent = 'Loading...';
+  content.textContent = '';
+  modal.classList.add('active');
+
+  try {
+    const resp = await fetch(`/api/file/${factorId}/${fileType}`);
+    const data = await resp.json();
+    if (data.error) {
+      path.textContent = '';
+      content.textContent = data.error;
+    } else {
+      path.textContent = data.path;
+      content.textContent = data.content;
+    }
+  } catch (e) {
+    path.textContent = '';
+    content.textContent = 'Failed to load file: ' + e.message;
+  }
+}
+
+function closeFileModal() {
+  document.getElementById('file-modal').classList.remove('active');
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeFileModal();
+});
+
+// ── Init ──
+loadFactorIndex();
+</script>
+</body>
+</html>
