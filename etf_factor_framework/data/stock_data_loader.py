@@ -504,7 +504,7 @@ class StockDataLoader:
             pivoted = trade_status_df.pivot(
                 index="symbol", columns="trade_date", values=col_name
             )
-            arr = pivoted.reindex(index=symbols, columns=dates).to_numpy()
+            arr = pivoted.reindex(index=symbols, columns=dates).to_numpy().copy()
             mask = pd.isna(arr)
             arr[mask] = default
             return arr.astype(bool)
