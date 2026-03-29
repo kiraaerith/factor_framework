@@ -9,9 +9,9 @@
 
 ## 备份与恢复
 
-迁移脚本位于源仓库：`etf_cross_ml-master/etf_factor_framework/scripts/move_factor_framework.py`
+迁移脚本位于本目录下：`move_factor_framework.py`
 
-脚本使用相对路径，不依赖具体的机器或目录名称。
+脚本使用相对路径（基于 `__file__` 推算），不依赖具体的机器或目录名称。
 
 
 ## 目录结构要求
@@ -22,34 +22,47 @@
 {任意根目录}/
 ├── etf_cross_ml-master/
 │   └── etf_factor_framework/
-│       └── scripts/
-│           └── move_factor_framework.py   # 脚本在这里
 └── factor_framework/                       # 迁移目标在这里（与 etf_cross_ml-master 同级）
+    ├── move_factor_framework.py            # 脚本在这里
     └── etf_factor_framework/
 ```
 
 关键约束：
 - `factor_framework` 必须与 `etf_cross_ml-master` 处于**同一父目录**下
-- 脚本必须位于 `etf_factor_framework/scripts/` 下，不能移动到其他层级
+- 脚本必须位于 `factor_framework/` 下，不能移动到其他层级
 - 父目录名称不限（不要求叫 `code_project_v2`），但上述相对层级关系不能变
 
 
 ### 迁移备份（将源目录复制到此处）
 
+在任意位置执行（路径可用绝对或相对路径指向脚本）：
+
 ```bash
-python etf_cross_ml-master/etf_factor_framework/scripts/move_factor_framework.py move
+python move_factor_framework.py move
+```
+
+或从父目录执行：
+
+```bash
+python factor_framework/move_factor_framework.py move
 ```
 
 执行后会：
-1. 将 `etf_factor_framework` 完整复制到本目录下
-2. 在项目根目录生成 `factor_framework_move_backup.json` 元数据文件，记录迁移时间、路径等信息
+1. 将 `etf_cross_ml-master/etf_factor_framework` 完整复制到本目录下的 `etf_factor_framework/`
+2. 在父目录生成 `factor_framework_move_backup.json` 元数据文件，记录迁移时间、路径等信息
 
 源目录不会被删除。
 
 ### 恢复备份（从此处恢复到源位置）
 
 ```bash
-python etf_cross_ml-master/etf_factor_framework/scripts/move_factor_framework.py restore
+python move_factor_framework.py restore
+```
+
+或从父目录执行：
+
+```bash
+python factor_framework/move_factor_framework.py restore
 ```
 
 执行后会：
