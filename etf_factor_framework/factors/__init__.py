@@ -7,6 +7,13 @@
 import warnings
 
 from .ohlcv_calculator import OHLCVFactorCalculator
+
+# ML因子导入
+try:
+    from .ml.cross_section_factor import MLCrossSectionalFactor
+except ImportError as e:
+    warnings.warn(f"Failed to import MLCrossSectionalFactor: {e}")
+    MLCrossSectionalFactor = None
 from .technical_factors import (
     CloseOverMA, RSI, Momentum, MACD, BollingerBands, FutureReturn,
     get_factor_class, list_available_factors, create_factor
@@ -149,4 +156,6 @@ __all__ = [
     'PriceVolumeCorrelation',
     # 动量因子
     'MomentumFactor',
+    # ML因子
+    'MLCrossSectionalFactor',
 ]
