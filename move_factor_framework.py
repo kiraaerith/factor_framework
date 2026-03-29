@@ -32,22 +32,21 @@ def do_move():
         print(f"[ERROR] Source not found: {SRC}")
         sys.exit(1)
 
-    if DST.exists():
-        print(f"[ERROR] Target already exists: {DST}")
-        print("If you want to redo the move, run 'restore' first.")
-        sys.exit(1)
-
     # Count files for info
     file_count = sum(1 for _ in SRC.rglob("*") if _.is_file())
     print(f"Source: {SRC}")
     print(f"Target: {DST}")
     print(f"Files to copy: {file_count}")
+    if DST.exists():
+        print(f"[WARN] Target already exists, will be overwritten.")
 
     if not confirm("Proceed with move?"):
         print("Aborted.")
         sys.exit(0)
 
     # Step 1: Copy to target
+    if DST.exists():
+        shutil.rmtree(DST)
     print("Copying files...")
     shutil.copytree(SRC, DST)
     print(f"Copied to {DST}")
