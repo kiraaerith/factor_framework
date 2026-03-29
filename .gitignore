@@ -27,3 +27,6 @@ Thumbs.db
 
 # Jupyter
 .ipynb_checkpoints/
+
+# Backup metadata
+backup_meta_data/

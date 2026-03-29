@@ -18,7 +18,8 @@ SCRIPT_DIR = Path(__file__).resolve().parent       # factor_framework
 PROJECT_ROOT = SCRIPT_DIR.parent                   # code_project_v2
 SRC = PROJECT_ROOT / "etf_cross_ml-master" / "etf_factor_framework"
 DST = SCRIPT_DIR / "etf_factor_framework"
-BACKUP_META = PROJECT_ROOT / "factor_framework_move_backup.json"
+BACKUP_META_DIR = SCRIPT_DIR / "backup_meta_data"
+BACKUP_META = BACKUP_META_DIR / "factor_framework_move_backup.json"
 
 
 def confirm(prompt: str) -> bool:
@@ -52,6 +53,7 @@ def do_move():
     print(f"Copied to {DST}")
 
     # Step 2: Save backup metadata
+    BACKUP_META_DIR.mkdir(parents=True, exist_ok=True)
     meta = {
         "moved_at": datetime.now().isoformat(),
         "source": str(SRC),

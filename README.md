@@ -49,7 +49,7 @@ python factor_framework/move_factor_framework.py move
 
 执行后会：
 1. 将 `etf_cross_ml-master/etf_factor_framework` 完整复制到本目录下的 `etf_factor_framework/`
-2. 在父目录生成 `factor_framework_move_backup.json` 元数据文件，记录迁移时间、路径等信息
+2. 在本目录的 `backup_meta_data/` 下生成 `factor_framework_move_backup.json` 元数据文件，记录迁移时间、路径等信息
 
 源目录不会被删除。
 
