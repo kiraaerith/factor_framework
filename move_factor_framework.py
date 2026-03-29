@@ -84,32 +84,19 @@ def do_restore():
         sys.exit(1)
 
     if src.exists():
-        print(f"[WARN] Source directory already exists: {src}")
-        if not confirm("Overwrite existing source directory?"):
-            print("Aborted.")
-            sys.exit(0)
-        shutil.rmtree(src)
+        print(f"[WARN] Source directory already exists, will be overwritten.")
 
     if not confirm("Proceed with restore?"):
         print("Aborted.")
         sys.exit(0)
 
+    if src.exists():
+        shutil.rmtree(src)
+
     # Copy back
     print("Restoring files...")
     shutil.copytree(dst, src)
     print(f"Restored to {src}")
-
-    # Remove target
-    if not confirm("Delete the target directory (factor_framework)?"):
-        print("Target kept. Restore completed (copy only).")
-        return
-
-    shutil.rmtree(dst)
-    print(f"Target removed: {dst}")
-
-    # Clean up metadata
-    BACKUP_META.unlink()
-    print("Backup metadata cleaned up.")
     print("Restore completed successfully.")
 
 
