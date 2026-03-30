@@ -875,6 +875,13 @@ try:
 except ImportError:
     _MOMENTUM_FACTORS = {}
 
+# 导入ML因子
+try:
+    from .ml.cross_section_factor import MLCrossSectionalFactor
+    _ML_FACTORS = {'MLCrossSectionalFactor': MLCrossSectionalFactor}
+except ImportError:
+    _ML_FACTORS = {}
+
 # 因子类注册表，用于通过名称动态创建因子实例
 _FACTOR_REGISTRY = {
     'CloseOverMA': CloseOverMA,
@@ -885,6 +892,7 @@ _FACTOR_REGISTRY = {
     'FutureReturn': FutureReturn,
     **_CTC_FACTORS,
     **_MOMENTUM_FACTORS,
+    **_ML_FACTORS,
 }
 
 

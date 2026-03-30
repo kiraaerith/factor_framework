@@ -1,0 +1,28 @@
+factor:
+  class: factors.ml.cross_section_factor.MLCrossSectionalFactor
+  direction: 1
+  params:
+    T_train_days: 252
+    T_val_days: 63
+    # n_forward 和 rebalance_freq 由 grid.rebalance_freqs 自动注入，勿在此处指定
+    feature_windows: [5, 10, 20, 60]
+    n_parallel_workers: 1      # 内部不并行，由外层 grid workers 并行
+    min_valid_ratio: 0.95
+    lgbm_params:
+      n_estimators: 300
+      early_stopping_rounds: 30
+
+backtest:
+  start_date: "2016-01-01"
+  end_date: "2025-12-31"
+  skip_leakage_check: true     # ML因子滚动训练天然无未来泄露
+
+grid:
+  neutralization_methods: [raw]
+  top_k_list: [20, 50]
+  rebalance_freqs: [20]        # 同时驱动 n_forward 和 rebalance_freq；不同值请建单独 config
+
+storage:
+  eval_db_path: "../factor_eval_result/factor_eval.db"
+
+benchmarks: [csi300, csi500, csi2000]
