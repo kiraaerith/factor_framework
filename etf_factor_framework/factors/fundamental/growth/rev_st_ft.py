@@ -8,10 +8,9 @@ Computes the revision momentum of analyst FY1 operating revenue consensus:
   REV_ST_FT = 0.5 * rank(REV_ST_FT_1Q) + 0.5 * rank(REV_ST_FT_6M)
 
 FY1 definition:
-  - month >= 5: FY1 = current calendar year  (annual report already disclosed)
-  - month <  5: FY1 = current calendar year - 1
-
-Cross-year boundary: if FY1 year differs between t and t-window, set to NaN.
+  - FY1 = current calendar year (t.year), always.
+  - For growth rate computation, t and t-window both use t.year as FY1 target.
+  - No cross-year NaN check needed (analysts predict current year throughout).
 
 Data source:
   - tushare.report_rc : op_rt (万元), quarter, report_date, org_name, ts_code
@@ -70,8 +69,8 @@ def _is_mainboard(symbol: str) -> bool:
 
 
 def _fy1_year(date: pd.Timestamp) -> int:
-    """FY1 target year: current year if month>=5, else current year - 1."""
-    return date.year if date.month >= 5 else date.year - 1
+    """FY1 target year: always current calendar year."""
+    return date.year
 
 
 def _winsorize_panel(panel: np.ndarray, lower: float, upper: float) -> np.ndarray:
@@ -168,20 +167,16 @@ class REV_ST_FT(FundamentalFactorCalculator):
         consensus_panel = self._build_consensus_panel(fd, symbols, trading_dates)
         # consensus_panel: (N, T) float64, units = 万元
 
-        # Step 3: Compute FY1 year for each trading date
-        fy1_years = np.array([_fy1_year(d) for d in trading_dates])
-
-        # Step 4: Compute growth rates for both windows
+        # Step 3: Compute growth rates for both windows
         growth_1q = np.full((N, T), np.nan, dtype=np.float64)
         growth_6m = np.full((N, T), np.nan, dtype=np.float64)
 
         for t_idx in range(T):
             curr = consensus_panel[:, t_idx]
-            fy1_t = fy1_years[t_idx]
 
             # 1Q window
             t0 = t_idx - WINDOW_1Q
-            if t0 >= 0 and fy1_years[t0] == fy1_t:
+            if t0 >= 0:
                 prev = consensus_panel[:, t0]
                 with np.errstate(divide='ignore', invalid='ignore'):
                     g = (curr - prev) / np.abs(prev)
@@ -191,7 +186,7 @@ class REV_ST_FT(FundamentalFactorCalculator):
 
             # 6M window
             t0 = t_idx - WINDOW_6M
-            if t0 >= 0 and fy1_years[t0] == fy1_t:
+            if t0 >= 0:
                 prev = consensus_panel[:, t0]
                 with np.errstate(divide='ignore', invalid='ignore'):
                     g = (curr - prev) / np.abs(prev)
@@ -281,7 +276,7 @@ class REV_ST_FT(FundamentalFactorCalculator):
         Build daily FY1 analyst consensus revenue panel from tushare.report_rc.
 
         For each trading date t:
-          - FY1 year = t.year if t.month >= 5 else t.year - 1
+          - FY1 year = t.year (current calendar year, always)
           - Look at reports with report_date in [t - 180 days, t]
             AND quarter == f"{fy1_year}Q4"
           - Per org_name, take the most recent report

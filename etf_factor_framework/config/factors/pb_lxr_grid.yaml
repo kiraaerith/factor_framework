@@ -5,6 +5,8 @@ factor:
 backtest:
   start_date: "2016-01-01"
   end_date: "2025-12-31"
+  # filter_mainboard_only: true  # default true; set false to include all boards (ChiNext/STAR/BSE/B-shares)
+  # filter_new_stock_days: 365   # default 365; exclude stocks listed < N days from factor; 0 to disable
 
 grid:
   neutralization_methods: [raw, size]

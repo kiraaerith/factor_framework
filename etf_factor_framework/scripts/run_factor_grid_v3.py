@@ -13,9 +13,12 @@ Usage (run from etf_factor_framework directory):
 
 Config keys: same as run_factor_grid_v2.py, plus optional:
     backtest.skip_leakage_check: true   # skip leakage check for daily valuation factors
+    backtest.filter_mainboard_only: true  # default true; exclude ChiNext/STAR/BSE/B-shares
+    backtest.filter_new_stock_days: 365   # default 365; exclude stocks listed < N days; 0 to disable
 """
 
 import os
+import re
 import sys
 import time
 import logging
@@ -46,6 +49,7 @@ from mappers.position_mappers import RankBasedMapper
 from evaluation.evaluator import FactorEvaluator
 from storage.result_storage import ResultStorage, StorageConfig
 from core.factor_data import FactorData
+from core.ohlcv_data import OHLCVData
 
 
 # ─────────────────────────────────────────────────────────────
@@ -191,6 +195,21 @@ import sqlite3
 import pandas as pd
 
 
+def is_mainboard_symbol(symbol: str) -> bool:
+    """Return True if symbol belongs to A-shares mainboard.
+
+    Mainboard: Shanghai 60xxxx or Shenzhen 00xxxx.
+    Handles any format: SHSE.600519, 600519.SH, 600519, SZSE.000001, etc.
+    Excluded: B-shares (900xxx/200xxx), ChiNext (300xxx),
+              STAR Market (688xxx), BSE (8xxxxx/43xxxx).
+    """
+    match = re.search(r'(\d{6})', symbol)
+    if not match:
+        return False
+    code = match.group(1)
+    return code.startswith('60') or code.startswith('00')
+
+
 # Benchmark index code mapping
 BENCHMARK_INDEX_MAP = {
     'csi300':  '000300.SH',
@@ -304,6 +323,8 @@ def main():
     start_date             = cfg.get("backtest", {}).get("start_date", "2016-01-01")
     end_date               = cfg.get("backtest", {}).get("end_date",   "2026-01-01")
     skip_leakage           = cfg.get("backtest", {}).get("skip_leakage_check", False)
+    filter_mainboard_only  = cfg.get("backtest", {}).get("filter_mainboard_only", True)
+    filter_new_stock_days  = cfg.get("backtest", {}).get("filter_new_stock_days", 365)
     neutralization_methods = cfg["grid"]["neutralization_methods"]
     top_k_list             = cfg["grid"]["top_k_list"]
     rebalance_freqs        = cfg["grid"]["rebalance_freqs"]
@@ -333,16 +354,39 @@ def main():
     loader = StockDataLoader()
     ohlcv = loader.load_ohlcv(start_date, end_date, use_adjusted=True)
     raw_open_arr, raw_open_symbols, raw_open_dates = loader.load_raw_open(start_date, end_date)
+    loader.close()
+
+    if filter_mainboard_only:
+        mb_mask_ohlcv    = np.array([is_mainboard_symbol(s) for s in ohlcv.symbols])
+        n_before_ohlcv   = len(ohlcv.symbols)
+        n_after_ohlcv    = int(mb_mask_ohlcv.sum())
+        mb_idx           = np.where(mb_mask_ohlcv)[0]
+        ohlcv = OHLCVData(
+            open=ohlcv.open[mb_idx, :],
+            high=ohlcv.high[mb_idx, :],
+            low=ohlcv.low[mb_idx, :],
+            close=ohlcv.close[mb_idx, :],
+            volume=ohlcv.volume[mb_idx, :],
+            symbols=ohlcv.symbols[mb_idx],
+            dates=ohlcv.dates,
+        )
+        mb_mask_raw      = np.array([is_mainboard_symbol(s) for s in raw_open_symbols])
+        raw_open_arr     = raw_open_arr[mb_mask_raw, :]
+        raw_open_symbols = raw_open_symbols[mb_mask_raw]
+        log.info(f"  Mainboard filter (ohlcv): {n_before_ohlcv} -> {n_after_ohlcv} symbols retained")
+    else:
+        log.info("  Mainboard filter OFF (filter_mainboard_only=false)")
+
+    log.info(f"  ohlcv close shape: {ohlcv.close.shape}")
+
     trade_ctx = loader.load_trade_context(
         start_date,
         end_date,
         raw_open_arr=raw_open_arr,
         symbols=raw_open_symbols,
         dates=raw_open_dates,
-        new_stock_filter_days=365,
+        new_stock_filter_days=filter_new_stock_days,
     )
-    loader.close()
-    log.info(f"  ohlcv close shape: {ohlcv.close.shape}")
 
     # Load benchmark index returns
     benchmark_returns = {}
@@ -410,6 +454,61 @@ def main():
                 )
                 nan_ratio_final = np.isnan(raw_factor._values).sum() / raw_factor._values.size
                 log.info(f"  Masked {n_delist_masked} delisted symbol-day cells -> NaN ratio: {nan_ratio_final:.1%}")
+
+    # Mainboard filter: explicitly mask non-mainboard symbols in factor panel
+    # BEFORE neutralization and RankBasedMapper, so position conversion only
+    # ranks mainboard stocks. This is the safety guarantee — independent of
+    # the ohlcv-level filter above.
+    if filter_mainboard_only:
+        non_mb_mask = np.array([not is_mainboard_symbol(s) for s in raw_factor.symbols])
+        n_non_mb = int(non_mb_mask.sum())
+        if n_non_mb > 0:
+            raw_factor._values[non_mb_mask, :] = np.nan
+            nan_ratio_mb = np.isnan(raw_factor._values).sum() / raw_factor._values.size
+            log.info(
+                f"  Mainboard filter (factor): masked {n_non_mb} non-mainboard symbols "
+                f"-> NaN ratio: {nan_ratio_mb:.1%}"
+            )
+        else:
+            log.info("  Mainboard filter (factor): all symbols already mainboard.")
+
+    # New stock filter: mask factor values for stocks listed fewer than
+    # filter_new_stock_days days, BEFORE neutralization and RankBasedMapper.
+    # Reuses trade_ctx.is_new_stock which is already computed with the same days.
+    if filter_new_stock_days > 0 and trade_ctx is not None and trade_ctx.is_new_stock.any():
+        tc_sym_map  = {s: i for i, s in enumerate(trade_ctx.symbols)}
+        tc_date_map = {d: i for i, d in enumerate(trade_ctx.dates)}
+
+        fac_sym_indices = []
+        tc_sym_indices  = []
+        for i, s in enumerate(raw_factor.symbols):
+            if s in tc_sym_map:
+                fac_sym_indices.append(i)
+                tc_sym_indices.append(tc_sym_map[s])
+
+        fac_date_indices = []
+        tc_date_indices  = []
+        for j, d in enumerate(raw_factor.dates):
+            if d in tc_date_map:
+                fac_date_indices.append(j)
+                tc_date_indices.append(tc_date_map[d])
+
+        if fac_sym_indices and fac_date_indices:
+            new_stk_sub   = trade_ctx.is_new_stock[np.ix_(tc_sym_indices, tc_date_indices)]
+            n_new_masked  = int(new_stk_sub.sum())
+            if n_new_masked > 0:
+                fac_sym_arr  = np.array(fac_sym_indices)
+                fac_date_arr = np.array(fac_date_indices)
+                raw_factor._values[np.ix_(fac_sym_arr, fac_date_arr)] = np.where(
+                    new_stk_sub,
+                    np.nan,
+                    raw_factor._values[np.ix_(fac_sym_arr, fac_date_arr)],
+                )
+                nan_ratio_ns = np.isnan(raw_factor._values).sum() / raw_factor._values.size
+                log.info(
+                    f"  New stock filter ({filter_new_stock_days}d): masked {n_new_masked} "
+                    f"symbol-day cells -> NaN ratio: {nan_ratio_ns:.1%}"
+                )
 
     # ----------------------------------------------------------
     # [3/5] Leakage detection

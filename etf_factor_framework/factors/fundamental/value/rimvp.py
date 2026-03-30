@@ -239,8 +239,8 @@ class RIMVP(FundamentalFactorCalculator):
         Load 180-day rolling consensus net profit for FY1/FY2/FY3.
 
         FY1/FY2/FY3 definition (year-end quarters only):
-          - month >= 5: FY1 = current year Q4, FY2 = +1, FY3 = +2
-          - month <  5: FY1 = (year-1) Q4,    FY2 = +1, FY3 = +2
+          - FY1 = current year Q4, FY2 = year+1 Q4, FY3 = year+2 Q4
+          - Always based on t.year (no month-based switching).
 
         Returns:
             (np1, np2, np3): each ndarray shape (N, T), units yuan (元).
@@ -325,11 +325,8 @@ class RIMVP(FundamentalFactorCalculator):
 
             window = fc_df.iloc[s_i:e_i]
 
-            # Determine FY1/FY2/FY3 year-end quarters for this date
-            if t_pd.month >= 5:
-                fy_years = [t_pd.year, t_pd.year + 1, t_pd.year + 2]
-            else:
-                fy_years = [t_pd.year - 1, t_pd.year, t_pd.year + 1]
+            # FY1/FY2/FY3: always based on current calendar year
+            fy_years = [t_pd.year, t_pd.year + 1, t_pd.year + 2]
 
             # Compute mean np_yuan per (code6, q_year) across all analysts
             consensus = (

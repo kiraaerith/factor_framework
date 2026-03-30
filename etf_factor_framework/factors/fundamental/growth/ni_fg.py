@@ -10,9 +10,9 @@ Data sources:
   - lixinger.financial_statements : q_ps_npatoshopc_c (yuan = 元, single-quarter)
                                     -> sum of Q1+Q2+Q3+Q4 for most recent disclosed fiscal year
 
-FY1 definition (consistent with RIMVP):
-  - month >= 5: FY1 = current calendar year  (annual report already disclosed)
-  - month <  5: FY1 = current calendar year - 1  (annual report not yet disclosed)
+FY1 definition:
+  - FY1 = current calendar year (t.year), always.
+  - Analysts predict current year throughout the year in tushare data.
 
 Unit alignment:
   - tushare np is in 万元 -> multiply by 1e4 to convert to 元
@@ -315,7 +315,7 @@ class NI_FG(FundamentalFactorCalculator):
             t_pd = pd.Timestamp(t)
 
             # FY1 year
-            fy1_year = t_pd.year if t_pd.month >= 5 else t_pd.year - 1
+            fy1_year = t_pd.year  # FY1 = current calendar year, always
 
             # 180-day window boundary via binary search
             t_180 = t - np.timedelta64(180, 'D')

@@ -11,7 +11,8 @@ FY3 definition:
   - FY3 year = t.year + 2  (rolls over on January 1st each year)
   - quarter = f"{t.year + 2}Q4"
 
-Cross-year boundary: if FY3 year differs between t and t-window, set to NaN.
+For growth rate computation, t and t-window both use t's FY3 year as target.
+No cross-year NaN check needed (analysts predict FY3 year throughout).
 
 Note: denominator is NOT abs() - revenue is normally positive. If denominator
       is zero or negative, set to NaN (negative revenue is an extreme anomaly).
@@ -173,20 +174,16 @@ class REV_LT_FT(FundamentalFactorCalculator):
         consensus_panel = self._build_consensus_panel(fd, symbols, trading_dates)
         # consensus_panel: (N, T) float64, units = 10k CNY
 
-        # Step 3: Compute FY3 year for each trading date
-        fy3_years = np.array([_fy3_year(d) for d in trading_dates])
-
-        # Step 4: Compute growth rates for both windows
+        # Step 3: Compute growth rates for both windows
         growth_1q = np.full((N, T), np.nan, dtype=np.float64)
         growth_6m = np.full((N, T), np.nan, dtype=np.float64)
 
         for t_idx in range(T):
             curr = consensus_panel[:, t_idx]
-            fy3_t = fy3_years[t_idx]
 
             # 1Q window
             t0 = t_idx - WINDOW_1Q
-            if t0 >= 0 and fy3_years[t0] == fy3_t:
+            if t0 >= 0:
                 prev = consensus_panel[:, t0]
                 with np.errstate(divide='ignore', invalid='ignore'):
                     g = (curr - prev) / prev  # no abs(): revenue denominator
@@ -197,7 +194,7 @@ class REV_LT_FT(FundamentalFactorCalculator):
 
             # 6M window
             t0 = t_idx - WINDOW_6M
-            if t0 >= 0 and fy3_years[t0] == fy3_t:
+            if t0 >= 0:
                 prev = consensus_panel[:, t0]
                 with np.errstate(divide='ignore', invalid='ignore'):
                     g = (curr - prev) / prev  # no abs(): revenue denominator
