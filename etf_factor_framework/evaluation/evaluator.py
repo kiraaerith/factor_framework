@@ -80,6 +80,7 @@ class FactorEvaluator:
         sell_commission_rate: Optional[float] = None,
         stamp_tax_rate: float = 0.0,
         benchmark_returns: Optional[Dict[str, pd.Series]] = None,
+        hold_mode: str = 'buyhold',
     ):
         """
         初始化因子评估器
@@ -101,6 +102,9 @@ class FactorEvaluator:
             sell_commission_rate: 卖出佣金率（None=使用 commission_rate）
             stamp_tax_rate: 印花税率（A股卖出时收取，默认0）
             benchmark_returns: 基准收益率字典，key为基准名（如'csi300'），value为日收益率Series
+            hold_mode: 持仓模式
+                - 'rebalance'（默认）: 调仓间隔内保持恒定权重，等价于每日再平衡到初始权重
+                - 'buyhold': 调仓间隔内权重随价格漂移，模拟真实买入持有
         """
         self.factor_data = factor_data
         self.ohlcv_data = ohlcv_data
@@ -117,6 +121,9 @@ class FactorEvaluator:
         self.buy_commission_rate = buy_commission_rate if buy_commission_rate is not None else commission_rate
         self.sell_commission_rate = sell_commission_rate if sell_commission_rate is not None else commission_rate
         self.stamp_tax_rate = stamp_tax_rate
+        if hold_mode not in ('rebalance', 'buyhold'):
+            raise ValueError(f"hold_mode must be 'rebalance' or 'buyhold', got '{hold_mode}'")
+        self.hold_mode = hold_mode
         self.benchmark_returns = benchmark_returns or {}
 
         # 对齐数据（numpy searchsorted）
@@ -264,6 +271,54 @@ class FactorEvaluator:
         # 向量化索引：每列 t 取自 source_indices[t] 列
         return position[:, source_indices]
 
+    def _apply_buyhold_drift(self, position: np.ndarray, returns: np.ndarray) -> np.ndarray:
+        """
+        将恒定权重仓位转换为买入持有（漂移权重）。
+
+        调仓日保持原始权重不变，调仓间隔内权重随各股票日收益率累积漂移，
+        使组合收益等价于"调仓日等权买入、期间不做再平衡"。
+
+        数学原理：
+            调仓日 t0 权重 w0[i]
+            第 t 天权重 w[i,t] = w0[i] * cum_ret[i,t0→t-1] / Σ_j(w0[j] * cum_ret[j,t0→t-1])
+            其中 cum_ret = Π(1 + r[s])，s 从 t0 到 t-1
+
+        Args:
+            position: 恒定权重仓位 (N, T)，调仓间隔内同一列向量
+            returns: 日收益率矩阵 (N, T)，returns[i,t] = close[t]/close[t-1] - 1
+
+        Returns:
+            np.ndarray: 漂移权重仓位 (N, T)
+        """
+        if self.rebalance_freq <= 1:
+            return position
+
+        N, T = position.shape
+        result = position.copy()
+
+        rebalance_indices = list(range(0, T, self.rebalance_freq))
+
+        for k, t0 in enumerate(rebalance_indices):
+            t_end = rebalance_indices[k + 1] if k + 1 < len(rebalance_indices) else T
+            span = t_end - t0 - 1  # number of days to drift
+            if span <= 0:
+                continue
+
+            w0 = position[:, t0]  # (N,) initial weights on rebalance day
+
+            # returns[:, t0:t_end-1] covers days t0, t0+1, ..., t_end-2
+            # cum[k] = Π(1+r[s], s=t0..t0+k) → weight for day t0+k+1
+            period_ret = returns[:, t0:t_end - 1].copy()  # (N, span)
+            period_ret = np.where(np.isnan(period_ret), 0.0, period_ret)
+            cum = np.cumprod(1.0 + period_ret, axis=1)    # (N, span)
+
+            values = w0[:, None] * cum                     # (N, span)
+            col_sums = np.nansum(values, axis=0, keepdims=True)
+            col_sums = np.where(col_sums < 1e-10, 1.0, col_sums)
+            result[:, t0 + 1:t_end] = values / col_sums
+
+        return result
+
     def _calculate_portfolio_returns(self):
         """计算组合收益率序列，纯 numpy 矩阵运算"""
         # ── 1. 应用调仓频率 + 交易约束（A股模式）──────────────────────────
@@ -285,6 +340,12 @@ class FactorEvaluator:
             rebalanced_position = self._apply_rebalance_freq(self.aligned_position)
         else:
             rebalanced_position = self.aligned_position
+
+        # ── 1.5 买入持有漂移：将恒定权重转为按日漂移权重 ──────────────────
+        if self.hold_mode == 'buyhold' and self.rebalance_freq > 1:
+            rebalanced_position = self._apply_buyhold_drift(
+                rebalanced_position, self.aligned_returns
+            )
 
         # ── 2. 收益率调整（优先级：退市 > 停牌 > NaN兜底）──────────────────
         aligned_returns = self.aligned_returns.copy()

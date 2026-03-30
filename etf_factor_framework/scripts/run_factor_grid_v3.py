@@ -301,8 +301,8 @@ def main():
     # --- parse config ---
     factor_class_path      = cfg["factor"]["class"]
     factor_direction       = cfg["factor"]["direction"]
-    start_date             = cfg["backtest"]["start_date"]
-    end_date               = cfg["backtest"]["end_date"]
+    start_date             = cfg.get("backtest", {}).get("start_date", "2016-01-01")
+    end_date               = cfg.get("backtest", {}).get("end_date",   "2026-01-01")
     skip_leakage           = cfg.get("backtest", {}).get("skip_leakage_check", False)
     neutralization_methods = cfg["grid"]["neutralization_methods"]
     top_k_list             = cfg["grid"]["top_k_list"]
@@ -376,6 +376,40 @@ def main():
         raw_factor._values[untradeable_mask, :] = np.nan
         nan_ratio_after = np.isnan(raw_factor._values).sum() / raw_factor._values.size
         log.info(f"  Masked {n_masked} untradeable symbols -> NaN ratio: {nan_ratio_after:.1%}")
+
+    # Mask out delisted stocks on each day (daily dynamic mask).
+    # Fundamental factors may retain values for delisted stocks via forward-fill,
+    # causing RankBasedMapper to select them. The evaluator's post-delist logic
+    # then zeroes out their positions, producing zero portfolio returns.
+    if trade_ctx is not None and hasattr(trade_ctx, 'is_delisted') and trade_ctx.is_delisted.any():
+        tc_sym_map = {s: i for i, s in enumerate(trade_ctx.symbols)}
+        tc_date_map = {d: i for i, d in enumerate(trade_ctx.dates)}
+
+        fac_sym_indices = []
+        tc_sym_indices = []
+        for i, s in enumerate(raw_factor.symbols):
+            if s in tc_sym_map:
+                fac_sym_indices.append(i)
+                tc_sym_indices.append(tc_sym_map[s])
+
+        fac_date_indices = []
+        tc_date_indices = []
+        for j, d in enumerate(raw_factor.dates):
+            if d in tc_date_map:
+                fac_date_indices.append(j)
+                tc_date_indices.append(tc_date_map[d])
+
+        if fac_sym_indices and fac_date_indices:
+            delist_sub = trade_ctx.is_delisted[np.ix_(tc_sym_indices, tc_date_indices)]
+            n_delist_masked = int(delist_sub.sum())
+            if n_delist_masked > 0:
+                fac_sym_arr = np.array(fac_sym_indices)
+                fac_date_arr = np.array(fac_date_indices)
+                raw_factor._values[np.ix_(fac_sym_arr, fac_date_arr)] = np.where(
+                    delist_sub, np.nan, raw_factor._values[np.ix_(fac_sym_arr, fac_date_arr)]
+                )
+                nan_ratio_final = np.isnan(raw_factor._values).sum() / raw_factor._values.size
+                log.info(f"  Masked {n_delist_masked} delisted symbol-day cells -> NaN ratio: {nan_ratio_final:.1%}")
 
     # ----------------------------------------------------------
     # [3/5] Leakage detection

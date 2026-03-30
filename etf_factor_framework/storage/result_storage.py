@@ -35,7 +35,7 @@ class StorageConfig:
     DEFAULT_BASE_PATH = r"E:\code_project\factor_eval_result\etf"
     
     # 默认数据库路径（数据库模式）
-    DEFAULT_DB_PATH = r"E:\code_project\factor_eval_result\factor_eval.db"
+    DEFAULT_DB_PATH = str(Path(__file__).resolve().parent.parent.parent / "factor_eval_result" / "factor_eval.db")
     
     # 文件命名模板
     METRICS_FILENAME = "metrics.json"
@@ -149,7 +149,7 @@ class ResultStorage:
         
         if self._is_database_mode:
             # 数据库模式
-            db_path = getattr(self.config, 'db_path', r"E:\code_project\factor_eval_result\factor_eval.db")
+            db_path = getattr(self.config, 'db_path', StorageConfig.DEFAULT_DB_PATH)
             self.db_storage = create_database_storage(db_path)
             self.base_path = None
         else:

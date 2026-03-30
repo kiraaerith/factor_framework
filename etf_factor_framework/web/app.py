@@ -141,16 +141,29 @@ def api_summary():
         "SELECT DISTINCT expression_name FROM factor_return_curves"
     )
     curve_expressions = {r[0] for r in cur.fetchall()}
+
+    # Load direction per factor_type from expression_params
+    cur.execute(
+        "SELECT DISTINCT factor_type, expression_params FROM factor_evaluation_results WHERE expression_params IS NOT NULL"
+    )
+    direction_map = {}
+    for r in cur.fetchall():
+        try:
+            d = json.loads(r[1]).get("direction")
+            if d is not None:
+                direction_map[r[0]] = d
+        except (json.JSONDecodeError, TypeError):
+            pass
     db.close()
 
-    # Group by base factor_id, pick best rank_icir
+    # Group by base factor_id, pick best sharpe
     best = {}  # factor_id -> best row dict
     for row in rows:
         expr = row["expression_name"]
         fid = extract_factor_id(expr)
-        ricir = row["rank_icir"] or 0
+        sharpe = row["sharpe"] or float("-inf")
 
-        if fid not in best or abs(ricir) > abs(best[fid]["best_rank_icir"]):
+        if fid not in best or sharpe > (best[fid]["best_sharpe"] or float("-inf")):
             # Parse annualized_return from other_metrics
             ann_ret = None
             om = row["other_metrics"]
@@ -166,6 +179,7 @@ def api_summary():
             best[fid] = {
                 "factor_id": fid,
                 "category": categories.get(fid, ""),
+                "direction": direction_map.get(fid),
                 "best_rank_icir": row["rank_icir"],
                 "best_icir": row["icir"],
                 "best_rank_ic": row["rank_ic"],
@@ -185,9 +199,9 @@ def api_summary():
                 "has_curve": expr in curve_expressions,
             }
 
-    # Sort by abs(rank_icir) desc
+    # Sort by sharpe desc
     factors = sorted(
-        best.values(), key=lambda x: abs(x["best_rank_icir"] or 0), reverse=True
+        best.values(), key=lambda x: x["best_sharpe"] or float("-inf"), reverse=True
     )
     return jsonify({"factors": factors})
 
@@ -208,7 +222,7 @@ def api_details(factor_id):
                other_metrics
         FROM ({DEDUP_SQL})
         WHERE expression_name IN ({placeholders})
-        ORDER BY rank_icir DESC
+        ORDER BY sharpe DESC
         """,
         expr_names,
     )
@@ -252,7 +266,24 @@ def api_details(factor_id):
             }
         )
 
-    return jsonify({"factor_id": factor_id, "results": results})
+    # Extract direction from expression_params (separate query since DEDUP_SQL doesn't include it)
+    direction = None
+    if results:
+        db2 = get_db()
+        cur2 = db2.cursor()
+        cur2.execute(
+            "SELECT expression_params FROM factor_evaluation_results WHERE expression_name IN ({}) LIMIT 1".format(placeholders),
+            expr_names,
+        )
+        param_row = cur2.fetchone()
+        db2.close()
+        if param_row and param_row[0]:
+            try:
+                direction = json.loads(param_row[0]).get("direction")
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+    return jsonify({"factor_id": factor_id, "direction": direction, "results": results})
 
 
 @app.route("/api/curve/<factor_id>")

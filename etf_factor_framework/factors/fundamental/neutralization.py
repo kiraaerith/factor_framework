@@ -1,10 +1,11 @@
 """
 基本面因子中性化模块
 
-提供三种中性化方式：
-- 'raw'      : 不做中性化，直接返回原始因子值
-- 'industry' : 行业内 z-score（每日截面内，同行业股票单独标准化）
-- 'size'     : 市值中性化（每日截面内，OLS 回归剔除 log 市值影响，取残差）
+提供四种中性化方式：
+- 'raw'           : 不做中性化，直接返回原始因子值
+- 'industry'      : 行业内 z-score（每日截面内，同行业股票单独标准化）
+- 'size'          : 市值中性化（每日截面内，OLS 回归剔除 log 市值影响，取残差）
+- 'industry_size' : 行业+市值联合中性化（先行业中性化，再市值中性化）
 
 使用示例::
 
@@ -61,8 +62,20 @@ def apply_neutralization(
         else:
             mc_aligned = market_cap_arr
         return _neutralize_size_numpy(factor_arr, mc_aligned)
+    elif method == 'industry_size':
+        if industry_map is None:
+            raise ValueError("method='industry_size' 时必须提供 industry_map")
+        if market_cap_arr is None:
+            raise ValueError("method='industry_size' 时必须提供 market_cap_arr")
+        # 先行业中性化，再市值中性化
+        ind_neutral = _neutralize_industry_numpy(factor_arr, symbols, industry_map)
+        if market_cap_symbols is not None:
+            mc_aligned = _align_market_cap(market_cap_arr, market_cap_symbols, symbols)
+        else:
+            mc_aligned = market_cap_arr
+        return _neutralize_size_numpy(ind_neutral, mc_aligned)
     else:
-        raise ValueError(f"未知中性化方式: {method}，请使用 'raw' / 'industry' / 'size'")
+        raise ValueError(f"未知中性化方式: {method}，请使用 'raw' / 'industry' / 'size' / 'industry_size'")
 
 
 def _align_market_cap(
