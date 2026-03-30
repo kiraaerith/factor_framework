@@ -146,15 +146,18 @@ pe_ttm, pb, ps_ttm, dyr, pcf_ttm, mc
 #### 资产负债表未用字段
 | 字段 | 含义 | 潜在用途 |
 |------|------|---------|
-| `q_bs_mc_t` | 货币资金 | 现金充裕度、净现金/市值 |
+| `q_bs_cabb_t` | 货币资金（非空率99.2%） | 现金充裕度、净现金/市值 |
+| `q_bs_mc_t` | ~~货币资金~~ → **市值**（已在 financial_statements 中冗余存储，非空率53.9%，建议用 fundamental.mc 代替） | 不建议直接用于因子，易误用 |
 | `q_bs_ar_t` | 应收账款 | AR增长 vs 收入增长（信号：坏账风险） |
 | `q_bs_nr_t` | 应收票据 | 合并应收分析 |
 | `q_bs_i_t` | 存货 | 存货增速 vs 收入增速（信号：需求减弱） |
 | `q_bs_gw_t` | 商誉 | 商誉/净资产（商誉风险） |
 | `q_bs_ap_t` | 应付账款 | 应付增速 vs 成本增速（供应链话语权） |
 | `q_bs_ca_t` | 流动资产 | 流动性分析 |
-| `q_bs_cl_t` | 流动负债 | 流动比率 |
+| `q_bs_cl_t` | 流动负债合计 | 流动比率 |
 | `q_bs_nwc_t` | 净营运资本 | NWC/营收（运营效率） |
+| `q_bs_ltl_t` | **长期借款**（非长期负债合计，非空率63.2%） | 长期有息债务代理，用于 Piotroski P5 |
+| `q_bs_lwi_t` | 有息负债合计（非空率92.0%） | 综合杠杆风险，覆盖率更高 |
 | `q_bs_ta_t_y2y` | 总资产YoY增长 | 资产扩张速度 |
 | `q_bs_toe_t_y2y` | 净资产YoY增长 | 净资产增速 |
 | `q_bs_tl_t_y2y` | 负债YoY增长 | 负债扩张速度 |
@@ -204,7 +207,7 @@ pe_ttm, pb, ps_ttm, dyr, pcf_ttm, mc
 | 建议因子 | 计算逻辑 | 使用字段 | 方向 |
 |---------|---------|---------|------|
 | `EARNINGS_QUALITY` | OCF / Net Profit = `q_m_ncffoa_np_r_t` | q_m_ncffoa_np_r_t | +1 |
-| `ACCRUAL_RATIO` | (NI - OCF) / Total Assets = (q_ps_npatoshopc_c - q_cfs_ncffoa_c) / q_bs_ta_t | 三者 | -1 |
+| `ACCRUAL_RATIO` | (扣非净利润 - 经营现金流) / 总资产 = (q_ps_npadnrpatoshaopc_c - q_cfs_ncffoa_c) / q_bs_ta_t<br>注: 使用扣非净利润更准确，排除了非经常性损益影响 | q_ps_npadnrpatoshaopc_c,<br>q_cfs_ncffoa_c,<br>q_bs_ta_t | -1 |
 | `NON_RECURRING_RATIO` | 非经常性损益 / 净利润 = q_ps_npadnrpatoshaopc_c / q_ps_npatoshopc_c | 两者 | -1 |
 | `OCF_OP_RATIO` | 经营现金流/营业利润 = q_m_ncffoa_op_r_t | q_m_ncffoa_op_r_t | +1 |
 | `CASH_EARNINGS_COMP` | OCF质量综合（多窗口q_m_ncffoa_np_r_t增长趋势） | q_m_ncffoa_np_r_t | +1 |
@@ -259,25 +262,31 @@ pe_ttm, pb, ps_ttm, dyr, pcf_ttm, mc
 | `FCF_YIELD_GROWTH` | 自由现金流收益率增长 | q_m_fcf_ttm趋势 + FCF_MC |
 | `PIOTROSKI_FSCORE` | Piotroski F-Score（9个二元信号综合） | 见下 |
 
-#### Piotroski F-Score 实现方案（高优先级）
+#### Piotroski F-Score 实现方案（已实现 ✅）
 基于9个binary信号，每个满足=1分，满分9分：
 ```
 盈利维度（4项）：
   P1: ROA > 0                        → q_m_roa_t > 0
   P2: OCF > 0                        → q_cfs_ncffoa_c > 0
-  P3: ROA增加（YoY）                  → q_m_roa_t vs lag4
+  P3: ROA增加（YoY）                  → q_m_roa_t vs lag ~250交易日
   P4: OCF > Net Income（质量信号）    → q_m_ncffoa_np_r_t > 1
 
 杠杆/流动性维度（3项）：
-  P5: 长期负债比率下降                → q_bs_ltl_t / q_bs_ta_t vs lag4
-  P6: 流动比率提升                    → q_m_c_r_t vs lag4
-  P7: 未增发股本（无稀释）            → q_bs_mc_t or shares数量无增加
+  P5: 长期借款比率下降                → q_bs_ltl_t / q_bs_ta_t vs lag
+       ⚠️ q_bs_ltl_t = 长期借款（非长期负债合计），为长期有息债务代理
+  P6: 流动比率提升                    → q_m_c_r_t vs lag
+  P7: 未增发股本（代理）              → (q_ps_np_c / q_ps_beps_c) YoY 未增加
+       ⚠️ 原文 q_bs_mc_t 有误（实为市值，非货币资金）
+          lixinger 无直接股本字段，改用净利润/基本EPS作为隐含股数代理
+          当NP或EPS≤0时该信号为NaN（不纳入计分）
 
 效率维度（2项）：
-  P8: 毛利率提升                      → q_ps_gp_m_t vs lag4
-  P9: 资产周转率提升                  → q_m_ta_to_t vs lag4
+  P8: 毛利率提升                      → q_ps_gp_m_t vs lag
+  P9: 资产周转率提升                  → q_m_ta_to_t vs lag
 ```
 **方向：** +1（F-Score越高越好）
+**实现文件：** `factors/fundamental/quality/piotroski_fscore.py`
+**配置文件：** `config/factors/piotroski_fscore_grid.yaml`
 
 ### 类别F：流动性/筹码因子（Liquidity Factors）
 **动机：** 换手率、流通盘等流动性因子在A股具有显著的反转预测效应。

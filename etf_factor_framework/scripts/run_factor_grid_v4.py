@@ -380,15 +380,38 @@ def main():
     nan_ratio = np.isnan(raw_factor.values).sum() / raw_factor.values.size
     log.info(f"  NaN ratio: {nan_ratio:.1%}")
 
-    # Mask out symbols not in OHLCV (untradeable / delisted stocks)
-    # so that RankBasedMapper only ranks among tradeable stocks.
+    # ----------------------------------------------------------
+    # Apply stock filters (北交所过滤 + OHLCV存在性)
+    # 注：市值过滤在因子内部逐日完成，不在此处做跨时间的静态过滤（避免未来数据泄漏）
+    # ----------------------------------------------------------
+    log.info("  Applying stock filters...")
+
     ohlcv_sym_set = set(ohlcv.symbols.tolist())
-    untradeable_mask = np.array([s not in ohlcv_sym_set for s in raw_factor.symbols])
-    n_masked = int(untradeable_mask.sum())
-    if n_masked > 0:
-        raw_factor._values[untradeable_mask, :] = np.nan
+
+    import re as _re
+
+    def _is_bse_stock(symbol: str) -> bool:
+        """判断是否为北交所股票：BSE.xxxxxx / SHSE.920xxx"""
+        if symbol.startswith("BSE."):
+            return True
+        m = _re.search(r'(\d{6})', symbol)
+        if m and m.group(1).startswith('920'):
+            return True
+        return False
+
+    filtered_mask = np.array([
+        sym not in ohlcv_sym_set or _is_bse_stock(sym)
+        for sym in raw_factor.symbols
+    ])
+    n_filtered = int(filtered_mask.sum())
+
+    if n_filtered > 0:
+        raw_factor._values[filtered_mask, :] = np.nan
         nan_ratio_after = np.isnan(raw_factor._values).sum() / raw_factor._values.size
-        log.info(f"  Masked {n_masked} untradeable symbols -> NaN ratio: {nan_ratio_after:.1%}")
+        bse_count    = sum(1 for s in raw_factor.symbols[filtered_mask] if _is_bse_stock(s))
+        ohlcv_count  = sum(1 for s in raw_factor.symbols[filtered_mask] if s not in ohlcv_sym_set)
+        log.info(f"  Filtered {n_filtered} stocks: BSE={bse_count}, no_ohlcv={ohlcv_count}")
+        log.info(f"  NaN ratio after filter: {nan_ratio_after:.1%}")
 
     # ----------------------------------------------------------
     # [3/5] Leakage detection
@@ -422,8 +445,8 @@ def main():
     # [4/5] Pre-compute neutralized factors
     # ----------------------------------------------------------
     log.info("[4/5] Pre-computing neutralized factors...")
-    industry_map            = fd.get_industry_map()
-    mc_arr, mc_symbols, _   = fd.get_market_cap_panel()
+    industry_map = fd.get_industry_map()
+    mc_arr, mc_symbols, _ = fd.get_market_cap_panel()
     log.info(f"  industry_map: {len(industry_map)} stocks")
     log.info(f"  market_cap shape: {mc_arr.shape}")
 
