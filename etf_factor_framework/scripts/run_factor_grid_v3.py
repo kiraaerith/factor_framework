@@ -217,16 +217,14 @@ BENCHMARK_INDEX_MAP = {
     'csi2000': '932000.CSI',
 }
 
-TUSHARE_DB_PATH = os.path.join(PROJECT_ROOT, '..', 'china_stock_data', 'tushare.db')
-
-
-def load_benchmark_returns(benchmarks: list, start_date: str, end_date: str) -> dict:
+def load_benchmark_returns(benchmarks: list, start_date: str, end_date: str, db_path: str) -> dict:
     """Load daily returns for benchmark indices from tushare.db.
 
     Args:
         benchmarks: list of benchmark names, e.g. ['csi300', 'csi500', 'csi2000']
         start_date: 'YYYY-MM-DD'
         end_date: 'YYYY-MM-DD'
+        db_path: path to tushare.db
 
     Returns:
         dict: {benchmark_name: pd.Series} with DatetimeIndex and daily returns (decimal)
@@ -234,7 +232,7 @@ def load_benchmark_returns(benchmarks: list, start_date: str, end_date: str) -> 
     if not benchmarks:
         return {}
 
-    db_path = os.path.abspath(TUSHARE_DB_PATH)
+    db_path = os.path.abspath(db_path)
     if not os.path.exists(db_path):
         print(f"[WARN] Tushare DB not found at {db_path}, skipping benchmark loading.")
         return {}
@@ -312,14 +310,27 @@ def main():
         "--workers", type=int, default=4,
         help="Number of parallel worker processes (default 4, capped at cpu_count-1)"
     )
+    parser.add_argument(
+        "--data-dir", default=None,
+        help="Path to china_stock_data directory containing tushare.db and lixinger.db. "
+             "Defaults to <project_root>/../china_stock_data"
+    )
     args = parser.parse_args()
 
     config_path = os.path.abspath(args.config)
     cfg         = load_config(config_path)
 
+    # --- resolve data directory ---
+    if args.data_dir:
+        data_dir = os.path.abspath(args.data_dir)
+    else:
+        data_dir = os.path.abspath(os.path.join(PROJECT_ROOT, '..', 'china_stock_data'))
+    tushare_db  = os.path.join(data_dir, 'tushare.db')
+
     # --- parse config ---
     factor_class_path      = cfg["factor"]["class"]
     factor_direction       = cfg["factor"]["direction"]
+    factor_init_params     = cfg["factor"].get("params", {})
     start_date             = cfg.get("backtest", {}).get("start_date", "2016-01-01")
     end_date               = cfg.get("backtest", {}).get("end_date",   "2026-01-01")
     skip_leakage           = cfg.get("backtest", {}).get("skip_leakage_check", False)
@@ -339,6 +350,7 @@ def main():
     log.info("=" * 70)
     log.info(f"Factor grid evaluation (PARALLEL): {factor_class.__name__}")
     log.info(f"Config  : {config_path}")
+    log.info(f"Data dir: {data_dir}")
     log.info(f"Period  : {start_date} ~ {end_date}")
     log.info(f"Grid    : {len(neutralization_methods)} neutralizations x "
              f"{len(top_k_list)} top_k x {len(rebalance_freqs)} freqs = {total} combos")
@@ -351,7 +363,7 @@ def main():
     # [1/5] Load market data
     # ----------------------------------------------------------
     log.info("[1/5] Loading market data...")
-    loader = StockDataLoader()
+    loader = StockDataLoader(tushare_db_path=tushare_db)
     ohlcv = loader.load_ohlcv(start_date, end_date, use_adjusted=True)
     raw_open_arr, raw_open_symbols, raw_open_dates = loader.load_raw_open(start_date, end_date)
     loader.close()
@@ -392,7 +404,7 @@ def main():
     benchmark_returns = {}
     if benchmarks:
         log.info(f"  Loading benchmark returns: {benchmarks}")
-        benchmark_returns = load_benchmark_returns(benchmarks, start_date, end_date)
+        benchmark_returns = load_benchmark_returns(benchmarks, start_date, end_date, db_path=tushare_db)
         for bm_name, bm_ret in benchmark_returns.items():
             log.info(f"    {bm_name}: {len(bm_ret)} days, range {bm_ret.index[0].date()}~{bm_ret.index[-1].date()}")
     else:
@@ -403,7 +415,7 @@ def main():
     # ----------------------------------------------------------
     log.info("[2/5] Loading fundamental data & computing raw factor...")
     fd            = FundamentalData(start_date=start_date, end_date=end_date)
-    calculator    = factor_class()
+    calculator    = factor_class(**factor_init_params)
     raw_factor    = calculator.calculate(fd)
     factor_name   = raw_factor.name
     factor_params = calculator.params
