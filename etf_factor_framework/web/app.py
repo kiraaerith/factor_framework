@@ -129,7 +129,7 @@ def api_summary():
         f"""
         SELECT id, expression_name, neutralization_method, top_k, rebalance_freq,
                sharpe, max_drawdown, calmar, ic, icir, rank_ic, rank_icir,
-               other_metrics
+               other_metrics, expression_params
         FROM ({DEDUP_SQL})
         ORDER BY expression_name, rank_icir DESC
         """
@@ -141,19 +141,6 @@ def api_summary():
         "SELECT DISTINCT expression_name FROM factor_return_curves"
     )
     curve_expressions = {r[0] for r in cur.fetchall()}
-
-    # Load direction per factor_type from expression_params
-    cur.execute(
-        "SELECT DISTINCT factor_type, expression_params FROM factor_evaluation_results WHERE expression_params IS NOT NULL"
-    )
-    direction_map = {}
-    for r in cur.fetchall():
-        try:
-            d = json.loads(r[1]).get("direction")
-            if d is not None:
-                direction_map[r[0]] = d
-        except (json.JSONDecodeError, TypeError):
-            pass
     db.close()
 
     # Group by base factor_id, pick best sharpe
@@ -176,10 +163,19 @@ def api_summary():
                 except (json.JSONDecodeError, AttributeError):
                     pass
 
+            # Parse direction from expression_params (combo-level direction)
+            best_direction = None
+            ep = row["expression_params"]
+            if ep:
+                try:
+                    best_direction = json.loads(ep).get("direction")
+                except (json.JSONDecodeError, TypeError):
+                    pass
+
             best[fid] = {
                 "factor_id": fid,
                 "category": categories.get(fid, ""),
-                "direction": direction_map.get(fid),
+                "direction": best_direction,  # best combo's direction
                 "best_rank_icir": row["rank_icir"],
                 "best_icir": row["icir"],
                 "best_rank_ic": row["rank_ic"],
@@ -219,7 +215,7 @@ def api_details(factor_id):
         f"""
         SELECT id, expression_name, neutralization_method, top_k, rebalance_freq,
                sharpe, max_drawdown, calmar, ic, icir, rank_ic, rank_icir,
-               other_metrics
+               other_metrics, expression_params
         FROM ({DEDUP_SQL})
         WHERE expression_name IN ({placeholders})
         ORDER BY sharpe DESC
@@ -247,6 +243,15 @@ def api_details(factor_id):
             except (json.JSONDecodeError, AttributeError):
                 pass
 
+        # Extract direction from each combo's expression_params
+        combo_direction = None
+        ep = row["expression_params"]
+        if ep:
+            try:
+                combo_direction = json.loads(ep).get("direction")
+            except (json.JSONDecodeError, TypeError):
+                pass
+
         results.append(
             {
                 "id": row["id"],
@@ -254,6 +259,7 @@ def api_details(factor_id):
                 "neutralization": row["neutralization_method"],
                 "top_k": row["top_k"],
                 "rebalance_freq": row["rebalance_freq"],
+                "direction": combo_direction,  # combo-level direction
                 "sharpe": row["sharpe"],
                 "max_drawdown": row["max_drawdown"],
                 "calmar": row["calmar"],
@@ -266,24 +272,7 @@ def api_details(factor_id):
             }
         )
 
-    # Extract direction from expression_params (separate query since DEDUP_SQL doesn't include it)
-    direction = None
-    if results:
-        db2 = get_db()
-        cur2 = db2.cursor()
-        cur2.execute(
-            "SELECT expression_params FROM factor_evaluation_results WHERE expression_name IN ({}) LIMIT 1".format(placeholders),
-            expr_names,
-        )
-        param_row = cur2.fetchone()
-        db2.close()
-        if param_row and param_row[0]:
-            try:
-                direction = json.loads(param_row[0]).get("direction")
-            except (json.JSONDecodeError, TypeError):
-                pass
-
-    return jsonify({"factor_id": factor_id, "direction": direction, "results": results})
+    return jsonify({"factor_id": factor_id, "results": results})
 
 
 @app.route("/api/curve/<factor_id>")

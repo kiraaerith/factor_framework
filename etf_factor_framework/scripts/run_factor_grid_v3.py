@@ -329,31 +329,52 @@ def main():
 
     # --- parse config ---
     factor_class_path      = cfg["factor"]["class"]
-    factor_direction       = cfg["factor"]["direction"]
     factor_init_params     = cfg["factor"].get("params", {})
     start_date             = cfg.get("backtest", {}).get("start_date", "2016-01-01")
     end_date               = cfg.get("backtest", {}).get("end_date",   "2026-01-01")
     skip_leakage           = cfg.get("backtest", {}).get("skip_leakage_check", False)
     filter_mainboard_only  = cfg.get("backtest", {}).get("filter_mainboard_only", True)
     filter_new_stock_days  = cfg.get("backtest", {}).get("filter_new_stock_days", 365)
-    neutralization_methods = cfg["grid"]["neutralization_methods"]
-    top_k_list             = cfg["grid"]["top_k_list"]
-    rebalance_freqs        = cfg["grid"]["rebalance_freqs"]
     eval_db_path           = cfg["storage"]["eval_db_path"]
     benchmarks             = cfg.get("benchmarks", ["csi300", "csi500", "csi2000"])
+
+    # --- parse grid config: support both legacy format and new explicit combos format ---
+    # Legacy format: grid.neutralization_methods, grid.top_k_list, grid.rebalance_freqs
+    # New format: grid.combos (explicit list with each combo's direction)
+    grid_cfg = cfg["grid"]
+    use_explicit_combos = "combos" in grid_cfg
+
+    if use_explicit_combos:
+        # New explicit combos format: each combo specifies its own direction
+        explicit_combos = grid_cfg["combos"]
+        # Extract unique values for logging
+        neutralization_methods = list(set(c.get("neutralization", c.get("neutral_method", "raw")) for c in explicit_combos))
+        top_k_list = list(set(c["top_k"] for c in explicit_combos))
+        rebalance_freqs = list(set(c.get("freq", c.get("rebalance_freq", 5)) for c in explicit_combos))
+        total = len(explicit_combos)
+        default_direction = cfg["factor"].get("direction", 1)  # fallback if combo lacks direction
+    else:
+        # Legacy format: global direction applies to all combos
+        neutralization_methods = grid_cfg["neutralization_methods"]
+        top_k_list             = grid_cfg["top_k_list"]
+        rebalance_freqs        = grid_cfg["rebalance_freqs"]
+        factor_direction       = cfg["factor"].get("direction", 1)
+        total = len(neutralization_methods) * len(top_k_list) * len(rebalance_freqs)
 
     n_workers    = min(args.workers, max(1, os.cpu_count() - 1))
     factor_class = load_factor_class(factor_class_path)
     log          = setup_logging(factor_class.__name__)
 
-    total = len(neutralization_methods) * len(top_k_list) * len(rebalance_freqs)
     log.info("=" * 70)
     log.info(f"Factor grid evaluation (PARALLEL): {factor_class.__name__}")
     log.info(f"Config  : {config_path}")
     log.info(f"Data dir: {data_dir}")
     log.info(f"Period  : {start_date} ~ {end_date}")
-    log.info(f"Grid    : {len(neutralization_methods)} neutralizations x "
-             f"{len(top_k_list)} top_k x {len(rebalance_freqs)} freqs = {total} combos")
+    if use_explicit_combos:
+        log.info(f"Grid    : EXPLICIT combos format = {total} combos (each with independent direction)")
+    else:
+        log.info(f"Grid    : {len(neutralization_methods)} neutralizations x "
+                 f"{len(top_k_list)} top_k x {len(rebalance_freqs)} freqs = {total} combos")
     log.info(f"Workers : {n_workers}  (cpu_count={os.cpu_count()})")
     log.info("=" * 70)
 
@@ -617,25 +638,53 @@ def main():
     del ohlcv_pkl, trade_ctx_pkl, nf_pkl, bm_pkl
 
     # Build task list — each item contains only small scalars + metadata
+    # Supports both legacy grid format and new explicit combos format
     dataset_name_base = "A_shares"
     combo_list = []
     idx = 0
-    for neutral_method in neutralization_methods:
-        for top_k in top_k_list:
-            for freq in rebalance_freqs:
-                idx += 1
-                combo_list.append({
-                    "neutral_method":    neutral_method,
-                    "top_k":             top_k,
-                    "freq":              freq,
-                    "direction":         factor_direction,
-                    "factor_params":     factor_params,
-                    "start_date":        start_date,
-                    "end_date":          end_date,
-                    "dataset_name_base": dataset_name_base,
-                    "combo_idx":         idx,
-                    "total":             total,
-                })
+
+    if use_explicit_combos:
+        # New explicit combos format: iterate over explicit_combos list
+        for combo_spec in explicit_combos:
+            idx += 1
+            neutral_method = combo_spec.get("neutralization", combo_spec.get("neutral_method", "raw"))
+            top_k          = combo_spec["top_k"]
+            freq           = combo_spec.get("freq", combo_spec.get("rebalance_freq", 5))
+            combo_dir      = combo_spec.get("direction", default_direction)
+            # Include direction in factor_params for database storage
+            combo_factor_params = {**factor_params, "direction": combo_dir}
+            combo_list.append({
+                "neutral_method":    neutral_method,
+                "top_k":             top_k,
+                "freq":              freq,
+                "direction":         combo_dir,
+                "factor_params":     combo_factor_params,
+                "start_date":        start_date,
+                "end_date":          end_date,
+                "dataset_name_base": dataset_name_base,
+                "combo_idx":         idx,
+                "total":             total,
+            })
+    else:
+        # Legacy format: Cartesian product of neutralization_methods, top_k_list, rebalance_freqs
+        for neutral_method in neutralization_methods:
+            for top_k in top_k_list:
+                for freq in rebalance_freqs:
+                    idx += 1
+                    # Include direction in factor_params for database storage
+                    combo_factor_params = {**factor_params, "direction": factor_direction}
+                    combo_list.append({
+                        "neutral_method":    neutral_method,
+                        "top_k":             top_k,
+                        "freq":              freq,
+                        "direction":         factor_direction,
+                        "factor_params":     combo_factor_params,
+                        "start_date":        start_date,
+                        "end_date":          end_date,
+                        "dataset_name_base": dataset_name_base,
+                        "combo_idx":         idx,
+                        "total":             total,
+                    })
 
     log.info(f"[5/5] Launching {n_workers} workers for {total} combos...")
 

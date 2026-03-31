@@ -1,0 +1,42 @@
+# BP_MRQ 显式组合列表配置示例
+# 演示如何为每个超参组合指定独立的排序方向
+#
+# 新格式说明：
+# - grid.combos: 显式列表，每项指定完整的超参组合
+# - 每个组合可以独立设置 neutralization, top_k, freq, direction
+# - direction: 1 表示从大到小排序（选因子值最大的股票）
+#             -1 表示从小到大排序（选因子值最小的股票）
+#
+# 向后兼容：
+# - 如果不指定 grid.combos，则使用旧的 grid.neutralization_methods/top_k_list/rebalance_freqs 格式
+# - 旧格式使用 factor.direction 作为全局方向
+
+factor:
+  class: factors.fundamental.value.bp_mrq.BP_MRQ
+  # direction 字段在新格式下作为默认值（当 combo 未指定 direction 时使用）
+
+backtest:
+  start_date: "2016-01-01"
+  end_date: "2025-12-31"
+
+grid:
+  # 新格式：显式组合列表
+  combos:
+    # 示例：raw 中性化，持仓20股，调仓5日，正向选股（选PB最大的）
+    - {neutralization: raw, top_k: 20, freq: 5, direction: 1}
+
+    # 示例：raw 中性化，持仓50股，调仓5日，反向选股（选PB最小的）
+    - {neutralization: raw, top_k: 50, freq: 5, direction: -1}
+
+    # 示例：size 中性化，持仓20股，调仓20日，正向选股
+    - {neutralization: size, top_k: 20, freq: 20, direction: 1}
+
+    # 示例：size 中性化，持仓50股，调仓20日，反向选股
+    - {neutralization: size, top_k: 50, freq: 20, direction: -1}
+
+    # 可以混合不同的调仓频率
+    - {neutralization: raw, top_k: 30, freq: 60, direction: 1}
+    - {neutralization: size, top_k: 30, freq: 60, direction: -1}
+
+storage:
+  eval_db_path: "../factor_eval_result/factor_eval.db"
