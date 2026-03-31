@@ -6,5 +6,6 @@
 
 from .piotroski_fscore import PiotroskiFScore
 from .accrual_ratio import AccrualRatio
+from .earnings_quality import EarningsQuality
 
-__all__ = ["PiotroskiFScore", "AccrualRatio"]
+__all__ = ["PiotroskiFScore", "AccrualRatio", "EarningsQuality"]
