@@ -1,0 +1,20 @@
+factor:
+  class: factors.fundamental.valuation.valuation_SIZE.valuation_SIZE
+  direction: -1
+
+backtest:
+  start_date: "2023-01-02"
+  end_date: "2025-12-31"
+  filter_mainboard_only: true
+  filter_new_stock_days: 365
+  exclude_st: true
+  skip_leakage_check: true
+  execution_price: "open"
+
+research:
+  top_k: 100
+  rebalance_freq: 1
+  neutralization: raw
+  output_dir: "../../agent_draft/202604/20260401_小市值因子研究/research_output"
+
+benchmarks: [csi300, csi500, csi2000]

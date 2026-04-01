@@ -1,0 +1,23 @@
+factor:
+  class: factors.fundamental.valuation.valuation_pb_roe_residual_v2.PB_ROE_Residual_V2
+  direction: -1
+
+backtest:
+  start_date: "2016-01-01"
+  end_date: "2026-01-01"
+
+grid:
+  combos:
+    - neutralization: size
+      top_k: 50
+      freq: 20
+      direction: -1
+    - neutralization: size
+      top_k: 50
+      freq: 20
+      direction: 1
+
+benchmarks: [csi300, csi500, csi2000]
+
+storage:
+  eval_db_path: "../factor_eval_result/factor_eval.db"
