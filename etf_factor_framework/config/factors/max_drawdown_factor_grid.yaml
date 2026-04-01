@@ -1,0 +1,19 @@
+factor:
+  class: factors.fundamental.technical.max_drawdown_factor.MaxDrawdownFactor
+  direction: -1
+  params:
+    period: 60        # 滚动窗口（交易日数）
+    min_periods: 1    # 最少观测数（1 = 允许窗口不满时输出；设 period 则强制满窗口）
+
+backtest:
+  start_date: "2016-01-01"
+  end_date: "2025-12-31"
+  skip_leakage_check: false   # 滚动最大回撤仅用历史数据，无未来泄露，保持默认检测
+
+grid:
+  neutralization_methods: [raw, size]
+  top_k_list: [20, 50]
+  rebalance_freqs: [5, 20, 60]
+
+storage:
+  eval_db_path: "../factor_eval_result/factor_eval.db"
