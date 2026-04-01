@@ -81,6 +81,8 @@ class FactorEvaluator:
         stamp_tax_rate: float = 0.0,
         benchmark_returns: Optional[Dict[str, pd.Series]] = None,
         hold_mode: str = 'buyhold',
+        blocked_buy_mode: str = 'wait_rebalance',
+        blocked_sell_mode: str = 'asap',
     ):
         """
         初始化因子评估器
@@ -105,6 +107,8 @@ class FactorEvaluator:
             hold_mode: 持仓模式
                 - 'rebalance'（默认）: 调仓间隔内保持恒定权重，等价于每日再平衡到初始权重
                 - 'buyhold': 调仓间隔内权重随价格漂移，模拟真实买入持有
+            blocked_buy_mode: 买入受阻策略 'wait_rebalance'（默认）或 'asap'
+            blocked_sell_mode: 卖出受阻策略 'wait_rebalance' 或 'asap'（默认）
         """
         self.factor_data = factor_data
         self.ohlcv_data = ohlcv_data
@@ -124,6 +128,8 @@ class FactorEvaluator:
         if hold_mode not in ('rebalance', 'buyhold'):
             raise ValueError(f"hold_mode must be 'rebalance' or 'buyhold', got '{hold_mode}'")
         self.hold_mode = hold_mode
+        self.blocked_buy_mode = blocked_buy_mode
+        self.blocked_sell_mode = blocked_sell_mode
         self.benchmark_returns = benchmark_returns or {}
 
         # 对齐数据（numpy searchsorted）
@@ -333,6 +339,8 @@ class FactorEvaluator:
             adjuster = PositionAdjuster(
                 trade_context=self.aligned_trade_context,
                 delay=self.delay,
+                blocked_buy_mode=self.blocked_buy_mode,
+                blocked_sell_mode=self.blocked_sell_mode,
             )
             rebalanced_df = adjuster.adjust(pos_df, rebalance_freq=self.rebalance_freq)
             rebalanced_position = rebalanced_df.values

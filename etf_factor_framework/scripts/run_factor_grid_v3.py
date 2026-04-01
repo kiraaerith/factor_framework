@@ -335,6 +335,7 @@ def main():
     skip_leakage           = cfg.get("backtest", {}).get("skip_leakage_check", False)
     filter_mainboard_only  = cfg.get("backtest", {}).get("filter_mainboard_only", True)
     filter_new_stock_days  = cfg.get("backtest", {}).get("filter_new_stock_days", 365)
+    exclude_st             = cfg.get("backtest", {}).get("exclude_st", False)
     eval_db_path           = cfg["storage"]["eval_db_path"]
     benchmarks             = cfg.get("benchmarks", ["csi300", "csi500", "csi2000"])
 
@@ -542,6 +543,88 @@ def main():
                     f"  New stock filter ({filter_new_stock_days}d): masked {n_new_masked} "
                     f"symbol-day cells -> NaN ratio: {nan_ratio_ns:.1%}"
                 )
+
+    # ST filter: mask ST stocks in factor panel so RankBasedMapper excludes them.
+    # Data source: tushare stock_st table (daily ST flag).
+    if exclude_st:
+        conn_st = sqlite3.connect(tushare_db)
+        sd_st = start_date.replace('-', '')
+        ed_st = end_date.replace('-', '')
+        st_df = pd.read_sql_query(
+            f"SELECT ts_code, trade_date FROM stock_st "
+            f"WHERE trade_date >= '{sd_st}' AND trade_date <= '{ed_st}'",
+            conn_st,
+        )
+        conn_st.close()
+        if not st_df.empty:
+            def _ts_to_jq_st(tc):
+                code, ex = tc.split('.')
+                return f"SHSE.{code}" if ex == 'SH' else f"SZSE.{code}"
+            st_df['symbol'] = st_df['ts_code'].apply(_ts_to_jq_st)
+            st_df['date'] = pd.to_datetime(st_df['trade_date'], format='%Y%m%d')
+
+            fac_sym_map_st = {s: i for i, s in enumerate(raw_factor.symbols)}
+            fac_date_map_st = {pd.Timestamp(d): j for j, d in enumerate(raw_factor.dates)}
+            st_si, st_di = [], []
+            for _, row in st_df.iterrows():
+                si = fac_sym_map_st.get(row['symbol'])
+                di = fac_date_map_st.get(row['date'])
+                if si is not None and di is not None:
+                    st_si.append(si)
+                    st_di.append(di)
+            if st_si:
+                raw_factor._values[st_si, st_di] = np.nan
+                nan_ratio_st = np.isnan(raw_factor._values).sum() / raw_factor._values.size
+                log.info(f"  ST filter: masked {len(st_si)} cells -> NaN ratio: {nan_ratio_st:.1%}")
+            else:
+                log.info("  ST filter: no ST cells found in date range")
+        else:
+            log.info("  ST filter: stock_st table empty for date range")
+    else:
+        log.info("  ST filter: OFF (exclude_st=false)")
+
+    # Delisting transition filter: mask stocks in 退市整理期 (the ~15 trading days
+    # before official delist_date). During this period, stock_st no longer marks them
+    # as ST, but they are effectively untradeable at normal prices.
+    # Data source: namechange.change_reason='终止上市' gives exact start_date.
+    _delist_transition_applied = False
+    conn_nc = sqlite3.connect(tushare_db)
+    nc_df = pd.read_sql_query(
+        "SELECT ts_code, start_date FROM namechange WHERE change_reason='终止上市'",
+        conn_nc,
+    )
+    conn_nc.close()
+    if not nc_df.empty:
+        def _ts_to_jq(tc):
+            code, ex = tc.split('.')
+            return f"SHSE.{code}" if ex == 'SH' else f"SZSE.{code}"
+
+        nc_df['symbol'] = nc_df['ts_code'].apply(_ts_to_jq)
+        nc_df['start_ts'] = pd.to_datetime(nc_df['start_date'], format='%Y%m%d')
+
+        fac_sym_map = {s: i for i, s in enumerate(raw_factor.symbols)}
+        fac_dates_ts = pd.DatetimeIndex([pd.Timestamp(d) for d in raw_factor.dates])
+
+        n_dt_masked = 0
+        for _, row in nc_df.iterrows():
+            si = fac_sym_map.get(row['symbol'])
+            if si is None:
+                continue
+            date_mask = fac_dates_ts >= row['start_ts']
+            n_before = int(np.isnan(raw_factor._values[si, date_mask]).sum())
+            raw_factor._values[si, date_mask] = np.nan
+            n_dt_masked += int(date_mask.sum()) - n_before
+
+        if n_dt_masked > 0:
+            nan_ratio_dt = np.isnan(raw_factor._values).sum() / raw_factor._values.size
+            log.info(
+                f"  Delist transition filter: masked {n_dt_masked} "
+                f"symbol-day cells -> NaN ratio: {nan_ratio_dt:.1%}"
+            )
+            _delist_transition_applied = True
+
+    if not _delist_transition_applied:
+        log.info("  Delist transition filter: no cells masked")
 
     # ----------------------------------------------------------
     # [3/5] Leakage detection

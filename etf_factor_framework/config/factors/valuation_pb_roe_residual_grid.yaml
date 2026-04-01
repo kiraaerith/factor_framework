@@ -7,9 +7,15 @@ backtest:
   end_date: "2026-01-01"
 
 grid:
-  neutralization_methods: [size]
-  top_k_list: [50]
-  rebalance_freqs: [20]
+  combos:
+    - neutralization: size
+      top_k: 50
+      freq: 20
+      direction: -1
+    - neutralization: size
+      top_k: 50
+      freq: 20
+      direction: 1
 
 benchmarks: [csi300, csi500, csi2000]
 

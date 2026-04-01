@@ -72,11 +72,13 @@ def rate_factor(rank_icir: float) -> str:
 
 
 # SQL subquery to deduplicate: keep only the latest record per combo
+# direction is included via json_extract to distinguish pos/neg combos with same other params
 DEDUP_SQL = """
     SELECT * FROM factor_evaluation_results
     WHERE id IN (
         SELECT MAX(id) FROM factor_evaluation_results
-        GROUP BY expression_name, neutralization_method, top_k, rebalance_freq
+        GROUP BY expression_name, neutralization_method, top_k, rebalance_freq,
+                 json_extract(expression_params, '$.direction')
     )
 """
 
