@@ -1,0 +1,29 @@
+factor:
+  class: factors.fundamental.value.small_cap_composite_v3.SmallCapCompositeV3
+  direction: 1
+  params:
+    mc_floor: 10.0
+    mc_cap: 200.0
+    roe_floor: -0.20
+    debt_ceiling: 0.90
+    turnover_floor: 0.005
+    turnover_window: 20
+    quality_alpha: 0.3
+    max_per_industry: 2
+
+backtest:
+  start_date: "2016-01-01"
+  end_date: "2026-01-01"
+  filter_mainboard_only: true
+  filter_new_stock_days: 365
+  skip_leakage_check: true
+
+grid:
+  neutralization_methods: [raw]
+  top_k_list: [5, 10]
+  rebalance_freqs: [5, 10]
+
+storage:
+  eval_db_path: "../factor_eval_result/factor_eval.db"
+
+benchmarks: [csi300, csi500, csi2000]
