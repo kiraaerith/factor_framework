@@ -1,0 +1,25 @@
+factor:
+  class: factors.fundamental.value.small_cap_composite.SmallCapComposite
+  direction: 1   # 因子值越大越好: -log(mc) 越大 = 市值越小
+  params:
+    mc_floor: 10.0         # 市值下限 10亿（排除微盘壳股）
+    mc_cap: 200.0          # 市值上限 200亿（聚焦小盘股）
+    roe_floor: -0.20       # ROE(TTM) 下限 -20%（排除重度亏损）
+    debt_ceiling: 0.90     # 资产负债率上限 90%（排除高杠杆）
+
+backtest:
+  start_date: "2016-01-01"
+  end_date: "2026-01-01"
+  filter_mainboard_only: true      # 只保留主板(60xxxx/00xxxx)，排除B股/科创/创业板/北交所
+  filter_new_stock_days: 365       # 排除上市不足1年的次新股
+  skip_leakage_check: true         # mc 是日频数据，无季报延迟，跳过前瞻检查
+
+grid:
+  neutralization_methods: [raw]    # 不中性化：保留市值暴露本身
+  top_k_list: [10, 20]
+  rebalance_freqs: [5, 10]
+
+storage:
+  eval_db_path: "../factor_eval_result/factor_eval.db"
+
+benchmarks: [csi300, csi500, csi2000]
