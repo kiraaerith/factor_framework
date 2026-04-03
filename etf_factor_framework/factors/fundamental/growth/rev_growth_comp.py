@@ -479,7 +479,7 @@ class REV_GROWTH_COMP(FundamentalFactorCalculator):
             ],
         }
 
-    def calculate(self, fundamental_data: FundamentalData) -> FactorData:
+    def calculate(self, fundamental_data: FundamentalData, pricevol_data=None) -> FactorData:
         """
         Compute REV_GROWTH_COMP daily panel (N_stocks x T_days).
 

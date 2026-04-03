@@ -139,7 +139,7 @@ class AssetEfficiencyComp(FundamentalFactorCalculator):
             "min_components": self._min_components,
         }
 
-    def calculate(self, fundamental_data: FundamentalData) -> FactorData:
+    def calculate(self, fundamental_data: FundamentalData, pricevol_data=None) -> FactorData:
         """
         计算 ASSET_EFFICIENCY_COMP 日频面板。
 

@@ -178,7 +178,7 @@ class COMP_ROBUST_GROWTH(FundamentalFactorCalculator):
     def params(self) -> dict:
         return {"direction": FACTOR_DIRECTION, "field": self.field, "T": self.T}
 
-    def calculate(self, fundamental_data: FundamentalData) -> FactorData:
+    def calculate(self, fundamental_data: FundamentalData, pricevol_data=None) -> FactorData:
         """
         Compute COMP_ROBUST_GROWTH daily panel (N stocks x T_days).
 

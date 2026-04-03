@@ -111,7 +111,7 @@ class MaxDrawdownFactor(FundamentalFactorCalculator):
     # Main calculation
     # ------------------------------------------------------------------
 
-    def calculate(self, fundamental_data: FundamentalData) -> FactorData:
+    def calculate(self, fundamental_data: FundamentalData, pricevol_data=None) -> FactorData:
         """
         计算滚动最大回撤日频因子面板。
 

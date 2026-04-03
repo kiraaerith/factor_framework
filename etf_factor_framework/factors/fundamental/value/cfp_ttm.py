@@ -1,20 +1,25 @@
 """
-CFP_TTM factor (Cash Flow to Price, TTM)
+CFP_TTM factor (Cash-Flow-to-Price, TTM)
 
 Formula: CFP_TTM = 1 / pcf_ttm
 
 Data fields:
-  - pcf_ttm : PCF-TTM (market cap / TTM operating cash flow)
+  - pcf_ttm : PCF-TTM (total market cap / operating cash flow TTM)
               lixinger.fundamental (daily)
 
-Factor direction: positive (higher CFP = more cash flow per unit of market cap = cheaper)
+Factor direction: positive (higher CFP_TTM = operating cash flow rich relative to market cap = better)
 Factor category: value - classic value
 
+Post-processing:
+  1. Mainboard filter: SHSE.60xxxx and SZSE.00xxxx only
+  2. Set NaN when |pcf_ttm| < 1e-6 (near-zero operating cash flow)
+  3. Replace any residual inf with NaN
+  4. Winsorize: clip to [5th, 95th] percentile per cross-section
+
 Notes:
-  - pcf_ttm is daily data aligned to disclosure dates, no reporting delay.
-  - Stocks with |pcf_ttm| < 1e-6 (near-zero cash flow) are set to NaN.
-  - Negative pcf_ttm (negative operating cash flow) yields CFP_TTM < 0; kept as-is.
-  - Mainboard filter: SHSE.60xxxx and SZSE.00xxxx only.
+  - pcf_ttm is daily data (lixinger pre-computes TTM rolling cash flow), no reporting delay.
+  - When pcf_ttm < 0 (negative operating cash flow), CFP_TTM < 0; kept as-is for ranking.
+  - Backtest start date not earlier than 2016-01-01 (lixinger valuation data coverage).
 """
 
 import os
@@ -34,8 +39,10 @@ from factors.fundamental.fundamental_data import FundamentalData
 from factors.fundamental.fundamental_calculator import FundamentalFactorCalculator
 
 FACTOR_NAME = "CFP_TTM"
-FACTOR_DIRECTION = 1  # positive: higher CFP (cheaper valuation) is better
-MIN_ABS_PCF = 1e-6   # |pcf_ttm| below this threshold => near-zero cash flow => NaN
+FACTOR_DIRECTION = 1   # positive: higher cash-flow yield is better (cheaper valuation)
+MIN_ABS_PCF = 1e-6     # |pcf_ttm| below this threshold => near-zero cash flow => NaN
+WINSOR_LO = 5.0        # 5th percentile lower bound
+WINSOR_HI = 95.0       # 95th percentile upper bound
 
 
 def _is_mainboard(symbol: str) -> bool:
@@ -49,13 +56,14 @@ def _is_mainboard(symbol: str) -> bool:
 
 class CFP_TTM(FundamentalFactorCalculator):
     """
-    Cash Flow to Price (TTM) factor.
+    Cash-Flow-to-Price TTM factor.
 
     Computes CFP_TTM = 1 / pcf_ttm for each stock on each trading day.
     Uses lixinger.fundamental.pcf_ttm (daily, already TTM-based).
 
     Only mainboard stocks (SHSE.60xxxx, SZSE.00xxxx) are included.
     Stocks with |pcf_ttm| < 1e-6 are set to NaN (near-zero operating cash flow).
+    Negative pcf_ttm (negative operating cash flow) yields negative CFP_TTM, kept as-is.
     """
 
     @property
@@ -70,22 +78,26 @@ class CFP_TTM(FundamentalFactorCalculator):
     def params(self) -> dict:
         return {"direction": FACTOR_DIRECTION}
 
-    def calculate(self, fundamental_data: FundamentalData) -> FactorData:
+    def calculate(self, fundamental_data: FundamentalData, pricevol_data=None) -> FactorData:
         """
         Calculate CFP_TTM daily panel.
 
         Returns:
-            FactorData: N stocks x T days, values = 1/pcf_ttm (float64)
+            FactorData: N stocks x T days, values = 1/pcf_ttm winsorized (float64)
         """
         pcf_values, symbols, dates = fundamental_data.get_valuation_panel("pcf_ttm")
 
-        # Apply mainboard filter
+        if pcf_values.size == 0:
+            raise ValueError("CFP_TTM: get_valuation_panel('pcf_ttm') returned empty array")
+
+        # 1. Mainboard filter (SHSE.60xxxx or SZSE.00xxxx)
+        # Loop: ~5000 stocks (single pass over symbol array)
         mainboard_mask = np.array([_is_mainboard(s) for s in symbols])
-        pcf_values = pcf_values[mainboard_mask]
+        pcf_values = pcf_values[mainboard_mask].copy()
         symbols = symbols[mainboard_mask]
 
-        # Compute CFP_TTM = 1 / pcf_ttm
-        # Suppress division by zero warnings - handled explicitly below
+        # 2. Compute CFP_TTM = 1 / pcf_ttm
+        #    Set NaN when |pcf_ttm| < 1e-6 to avoid near-zero division artifacts
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", RuntimeWarning)
             cfp_values = np.where(
@@ -94,8 +106,18 @@ class CFP_TTM(FundamentalFactorCalculator):
                 1.0 / pcf_values,
             )
 
-        # Replace any inf that may have slipped through
+        # 3. Replace any residual inf with NaN
         cfp_values = np.where(np.isinf(cfp_values), np.nan, cfp_values)
+        cfp_values = cfp_values.astype(np.float64)
+
+        # 4. Vectorized winsorization: clip to [5th, 95th] percentile per cross-section
+        #    nanpercentile operates along axis=0 (per date), shape (T,)
+        lo = np.nanpercentile(cfp_values, WINSOR_LO, axis=0)   # shape (T,)
+        hi = np.nanpercentile(cfp_values, WINSOR_HI, axis=0)   # shape (T,)
+        nan_mask = np.isnan(cfp_values)
+        cfp_values = np.clip(cfp_values, lo[np.newaxis, :], hi[np.newaxis, :])
+        # Restore NaN positions that may have been clipped with NaN bounds
+        cfp_values[nan_mask] = np.nan
         cfp_values = cfp_values.astype(np.float64)
 
         nan_ratio = np.isnan(cfp_values).mean() if cfp_values.size > 0 else 1.0
@@ -116,7 +138,7 @@ class CFP_TTM(FundamentalFactorCalculator):
 
 # ------------------------------------------------------------------
 # Smoke test (run: python cfp_ttm.py)
-# Uses full market with short date range to ensure enough cross-section.
+# Uses full market with 2-year date range to ensure enough cross-section.
 # ------------------------------------------------------------------
 if __name__ == "__main__":
     warnings.filterwarnings("ignore")
@@ -155,7 +177,7 @@ if __name__ == "__main__":
     valid = result.values[~np.isnan(result.values)]
     assert not np.isinf(valid).any(), "Factor contains inf values"
 
-    # Idempotency
+    # Idempotency check
     result2 = calculator.calculate(fd)
     both_nan = np.isnan(result.values) & np.isnan(result2.values)
     assert np.all((result.values == result2.values) | both_nan), "Idempotency failed"
@@ -167,11 +189,12 @@ if __name__ == "__main__":
         print(f"  N valid    : {len(valid_cs)}")
         print(f"  mean       : {valid_cs.mean():.6f}")
         print(f"  std        : {valid_cs.std():.6f}")
-        print(f"  min        : {valid_cs.min():.4f}")
-        print(f"  max        : {valid_cs.max():.4f}")
+        print(f"  min        : {valid_cs.min():.6f}")
+        print(f"  max        : {valid_cs.max():.6f}")
         print(f"  median     : {np.median(valid_cs):.6f}")
+        print(f"  neg count  : {(valid_cs < 0).sum()}")
 
-    # Sanity: check known stocks have plausible CFP_TTM values
+    # Sanity: check known stocks have expected CFP_TTM values
     TEST_CODES = ["600519", "000858", "601318", "000333", "600036"]
     fd_test = FundamentalData(
         start_date="2024-01-01",

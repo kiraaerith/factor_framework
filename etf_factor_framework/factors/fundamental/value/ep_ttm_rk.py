@@ -76,7 +76,7 @@ class EP_TTM_RK(FundamentalFactorCalculator):
     def params(self) -> dict:
         return {"direction": FACTOR_DIRECTION}
 
-    def calculate(self, fundamental_data: FundamentalData) -> FactorData:
+    def calculate(self, fundamental_data: FundamentalData, pricevol_data=None) -> FactorData:
         """
         Calculate EP_TTM_RK daily panel.
 

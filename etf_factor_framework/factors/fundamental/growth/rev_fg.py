@@ -86,7 +86,7 @@ class REV_FG(FundamentalFactorCalculator):
     def params(self) -> dict:
         return {"direction": FACTOR_DIRECTION}
 
-    def calculate(self, fundamental_data: FundamentalData) -> FactorData:
+    def calculate(self, fundamental_data: FundamentalData, pricevol_data=None) -> FactorData:
         """Compute REV_FG daily panel."""
         fd = fundamental_data
         fd._load_raw_data()

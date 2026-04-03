@@ -87,7 +87,7 @@ class InterestCoverage(FundamentalFactorCalculator):
     # Main calculation
     # ------------------------------------------------------------------
 
-    def calculate(self, fundamental_data: FundamentalData) -> FactorData:
+    def calculate(self, fundamental_data: FundamentalData, pricevol_data=None) -> FactorData:
         """
         计算利息覆盖率日频面板。
 

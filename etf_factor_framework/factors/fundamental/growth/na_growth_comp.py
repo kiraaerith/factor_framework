@@ -351,7 +351,7 @@ class NA_GROWTH_COMP(FundamentalFactorCalculator):
             "sub_factors": ["surprise_T8", "robust_T20"],
         }
 
-    def calculate(self, fundamental_data: FundamentalData) -> FactorData:
+    def calculate(self, fundamental_data: FundamentalData, pricevol_data=None) -> FactorData:
         """
         Compute NA_GROWTH_COMP daily panel (N_stocks x T_days).
 

@@ -86,6 +86,7 @@ class FundamentalLeakageDetector:
         self,
         calculator: FundamentalFactorCalculator,
         fundamental_data: FundamentalData,
+        pricevol_data=None,
     ) -> FundamentalLeakageReport:
         """
         检测因子是否存在未来数据泄露
@@ -93,6 +94,7 @@ class FundamentalLeakageDetector:
         Args:
             calculator: 因子计算器实例
             fundamental_data: 完整的 FundamentalData
+            pricevol_data: 完整的 PriceVolData（量价因子需要，基本面因子可不传）
 
         Returns:
             FundamentalLeakageReport
@@ -110,15 +112,18 @@ class FundamentalLeakageDetector:
         # （SQL 按 date 过滤，截断后重新 SQL 会丢失 date > split_date 但已披露的财报）
         fundamental_data._load_raw_data()
 
-        # 截断数据（只保留 report_date <= split_date 的财务数据）
+        # 先用完整数据计算因子（触发 pricevol_data 加载缓存）
+        full_factor = calculator.calculate(fundamental_data, pricevol_data=pricevol_data)
+
+        # 截断数据（只保留 split_date 之前的数据）
         short_fd = fundamental_data.truncate(split_date.strftime("%Y-%m-%d"))
+        short_pvd = pricevol_data.truncate(split_date.strftime("%Y-%m-%d")) if pricevol_data else None
 
         print(f"  - 完整数据集: {n} 个交易日")
         print(f"  - 截断数据集: {len(short_fd.trading_dates)} 个交易日 (截至 {split_date.date()})")
 
-        # 分别计算因子
-        full_factor = calculator.calculate(fundamental_data)
-        short_factor = calculator.calculate(short_fd)
+        # 用截断数据计算因子
+        short_factor = calculator.calculate(short_fd, pricevol_data=short_pvd)
 
         # 对比重叠时间段
         return self._compare(full_factor, short_factor, calculator.name)

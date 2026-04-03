@@ -257,7 +257,7 @@ class COMP_ACCEL(FundamentalFactorCalculator):
             "min_abs_mean_g": MIN_ABS_MEAN_G,
         }
 
-    def calculate(self, fundamental_data: FundamentalData) -> FactorData:
+    def calculate(self, fundamental_data: FundamentalData, pricevol_data=None) -> FactorData:
         """
         Compute COMP_ACCEL daily panel (N stocks x T_days).
 

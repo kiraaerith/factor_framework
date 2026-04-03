@@ -394,7 +394,7 @@ class FEP(FundamentalFactorCalculator):
     # Main calculate
     # ------------------------------------------------------------------
 
-    def calculate(self, fundamental_data: FundamentalData) -> FactorData:
+    def calculate(self, fundamental_data: FundamentalData, pricevol_data=None) -> FactorData:
         """
         Calculate FEP daily panel.
 

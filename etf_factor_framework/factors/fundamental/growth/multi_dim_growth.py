@@ -118,7 +118,7 @@ class MULTI_DIM_GROWTH(FundamentalFactorCalculator):
             ],
         }
 
-    def calculate(self, fundamental_data: FundamentalData) -> FactorData:
+    def calculate(self, fundamental_data: FundamentalData, pricevol_data=None) -> FactorData:
         """
         Compute MULTI_DIM_GROWTH daily panel.
 

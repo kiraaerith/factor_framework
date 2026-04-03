@@ -73,7 +73,7 @@ class AD_TO_COST(FundamentalFactorCalculator):
     def params(self) -> dict:
         return {"direction": FACTOR_DIRECTION}
 
-    def calculate(self, fundamental_data: FundamentalData) -> FactorData:
+    def calculate(self, fundamental_data: FundamentalData, pricevol_data=None) -> FactorData:
         """
         Compute AD_TO_COST daily panel (N stocks x T days).
 

@@ -158,7 +158,7 @@ class quality_QCS(FundamentalFactorCalculator):
     # Public API
     # ------------------------------------------------------------------
 
-    def calculate(self, fundamental_data: FundamentalData) -> FactorData:
+    def calculate(self, fundamental_data: FundamentalData, pricevol_data=None) -> FactorData:
         fd = fundamental_data
 
         # ---- 1. Load raw field panels ----

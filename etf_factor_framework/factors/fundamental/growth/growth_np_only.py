@@ -436,7 +436,7 @@ class growth_NP_only(FundamentalFactorCalculator):
             "ni_field": NI_FIELD,
         }
 
-    def calculate(self, fundamental_data: FundamentalData) -> FactorData:
+    def calculate(self, fundamental_data: FundamentalData, pricevol_data=None) -> FactorData:
         """
         Compute growth_NP_only daily panel (N_stocks x T_days).
 

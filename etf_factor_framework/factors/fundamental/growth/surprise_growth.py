@@ -230,7 +230,7 @@ class SURPRISE_GROWTH(FundamentalFactorCalculator):
             "T": self.T,
         }
 
-    def calculate(self, fundamental_data: FundamentalData) -> FactorData:
+    def calculate(self, fundamental_data: FundamentalData, pricevol_data=None) -> FactorData:
         """
         Compute composite SURPRISE_GROWTH daily panel (N stocks x T_days).
 

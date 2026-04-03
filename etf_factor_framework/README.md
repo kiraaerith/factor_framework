@@ -251,6 +251,10 @@ class MyEvaluator(Evaluator):
         return {'metric1': value1, 'metric2': value2}
 ```
 
+### 5. rolling_model - 滚动训练模型算子
+
+通过可插拔的模型（OLS、Lasso 等）对多个因子进行滚动窗口训练融合，输出因子值矩阵。训练集从 2 年逐渐增长到 5 年后固定滑动，支持可选的诊断指标存储。详见 [`rolling_model/README.md`](rolling_model/README.md)。
+
 ## 测试
 
 ### 运行所有测试

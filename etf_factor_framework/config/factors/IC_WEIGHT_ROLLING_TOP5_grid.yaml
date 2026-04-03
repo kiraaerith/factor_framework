@@ -1,0 +1,18 @@
+factor:
+  class: factors.fundamental.composite.ic_weight_rolling_top5.IC_WEIGHT_ROLLING_TOP5
+  direction: 1
+
+backtest:
+  start_date: "2016-01-01"
+  end_date: "2026-01-01"
+  skip_leakage_check: true   # sub-factors passed leakage check; rolling uses only past data
+
+grid:
+  neutralization_methods: [raw]
+  top_k_list: [20]
+  rebalance_freqs: [20]
+
+benchmarks: [csi300, csi500, csi2000]
+
+storage:
+  eval_db_path: "../factor_eval_result/factor_eval.db"

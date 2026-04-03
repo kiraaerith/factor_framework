@@ -43,6 +43,7 @@ import yaml
 
 from factors.fundamental.fundamental_data import FundamentalData
 from factors.fundamental.fundamental_leakage_detector import FundamentalLeakageDetector
+from factors.fundamental.pricevol_data import PriceVolData
 from factors.fundamental.neutralization import apply_neutralization
 from data.stock_data_loader import StockDataLoader
 from mappers.position_mappers import RankBasedMapper
@@ -335,7 +336,7 @@ def main():
     skip_leakage           = cfg.get("backtest", {}).get("skip_leakage_check", False)
     filter_mainboard_only  = cfg.get("backtest", {}).get("filter_mainboard_only", True)
     filter_new_stock_days  = cfg.get("backtest", {}).get("filter_new_stock_days", 365)
-    exclude_st             = cfg.get("backtest", {}).get("exclude_st", False)
+    exclude_st             = cfg.get("backtest", {}).get("exclude_st", True)
     eval_db_path           = cfg["storage"]["eval_db_path"]
     benchmarks             = cfg.get("benchmarks", ["csi300", "csi500", "csi2000"])
 
@@ -437,8 +438,9 @@ def main():
     # ----------------------------------------------------------
     log.info("[2/5] Loading fundamental data & computing raw factor...")
     fd            = FundamentalData(start_date=start_date, end_date=end_date)
+    pvd           = PriceVolData(start_date=start_date, end_date=end_date)
     calculator    = factor_class(**factor_init_params)
-    raw_factor    = calculator.calculate(fd)
+    raw_factor    = calculator.calculate(fd, pricevol_data=pvd)
     factor_name   = raw_factor.name
     factor_params = calculator.params
     log.info(f"  raw_factor shape: {raw_factor.shape}")
@@ -638,7 +640,7 @@ def main():
         for sr in [0.4, 0.5, 0.6, 0.7, 0.8]:
             detector = FundamentalLeakageDetector(split_ratio=sr)
             try:
-                leakage_report = detector.detect(calculator, fd)
+                leakage_report = detector.detect(calculator, fd, pricevol_data=pvd)
             except ValueError as e:
                 if "panel is empty" in str(e):
                     log.info(f"  split_ratio={sr}: panel empty for truncated period, skipping.")

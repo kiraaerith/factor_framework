@@ -150,7 +150,7 @@ class NI_LT_FT(FundamentalFactorCalculator):
             "min_analyst_count": MIN_ANALYST_COUNT,
         }
 
-    def calculate(self, fundamental_data: FundamentalData) -> FactorData:
+    def calculate(self, fundamental_data: FundamentalData, pricevol_data=None) -> FactorData:
         """Compute NI_LT_FT daily panel."""
         fd = fundamental_data
         fd._load_raw_data()

@@ -67,7 +67,7 @@ class EbitToEv(FundamentalFactorCalculator):
     def params(self) -> dict:
         return {"field": FIELD, "direction": FACTOR_DIRECTION}
 
-    def calculate(self, fundamental_data: FundamentalData) -> FactorData:
+    def calculate(self, fundamental_data: FundamentalData, pricevol_data=None) -> FactorData:
         """
         计算 EBIT_TO_EV 因子日频面板。
 

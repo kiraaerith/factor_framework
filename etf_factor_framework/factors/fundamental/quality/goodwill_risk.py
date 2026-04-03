@@ -69,7 +69,7 @@ class GoodwillRisk(FundamentalFactorCalculator):
     # Main calculation
     # ------------------------------------------------------------------
 
-    def calculate(self, fundamental_data: FundamentalData) -> FactorData:
+    def calculate(self, fundamental_data: FundamentalData, pricevol_data=None) -> FactorData:
         """
         计算商誉风险日频面板。
 

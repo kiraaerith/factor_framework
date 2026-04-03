@@ -490,7 +490,7 @@ class growth_NP_REV(FundamentalFactorCalculator):
             "rev_field": REV_FIELD,
         }
 
-    def calculate(self, fundamental_data: FundamentalData) -> FactorData:
+    def calculate(self, fundamental_data: FundamentalData, pricevol_data=None) -> FactorData:
         """
         Compute growth_NP_REV daily panel (N_stocks x T_days).
 

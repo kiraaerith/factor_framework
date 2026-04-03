@@ -1,0 +1,17 @@
+factor:
+  class: factors.fundamental.value.dyr.DYR
+  direction: 1
+
+backtest:
+  start_date: "2016-01-01"
+  end_date: "2026-01-01"
+
+grid:
+  neutralization_methods: [raw, size]
+  top_k_list: [20, 50]
+  rebalance_freqs: [5, 20, 60]
+
+benchmarks: [csi300, csi500, csi2000]
+
+storage:
+  eval_db_path: "../factor_eval_result/factor_eval.db"

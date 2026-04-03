@@ -219,7 +219,7 @@ class RD_COMPOSITE(FundamentalFactorCalculator):
             "min_valid_subfactors": MIN_VALID_SUBFACTORS,
         }
 
-    def calculate(self, fundamental_data: FundamentalData) -> FactorData:
+    def calculate(self, fundamental_data: FundamentalData, pricevol_data=None) -> FactorData:
         """
         Compute RD_COMPOSITE daily panel (N stocks x T days).
 

@@ -133,6 +133,19 @@ class DatabaseStorage:
         );
         """
 
+        create_decile_curves_sql = """
+        CREATE TABLE IF NOT EXISTS factor_decile_return_curves (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            result_id INTEGER NOT NULL,
+            expression_name TEXT NOT NULL,
+            decile INTEGER NOT NULL,
+            dates TEXT NOT NULL,
+            daily_returns TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (result_id) REFERENCES factor_evaluation_results(id)
+        );
+        """
+
         create_indexes_sql = [
             "CREATE INDEX IF NOT EXISTS idx_expression_name ON factor_evaluation_results(expression_name);",
             "CREATE INDEX IF NOT EXISTS idx_factor_type ON factor_evaluation_results(factor_type);",
@@ -147,12 +160,15 @@ class DatabaseStorage:
             "CREATE INDEX IF NOT EXISTS idx_neutralization ON factor_evaluation_results(neutralization_method);",
             "CREATE INDEX IF NOT EXISTS idx_top_k ON factor_evaluation_results(top_k);",
             "CREATE INDEX IF NOT EXISTS idx_rebalance_freq ON factor_evaluation_results(rebalance_freq);",
+            "CREATE INDEX IF NOT EXISTS idx_decile_result_id ON factor_decile_return_curves(result_id);",
+            "CREATE INDEX IF NOT EXISTS idx_decile_expression ON factor_decile_return_curves(expression_name);",
         ]
 
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(create_table_sql)
             cursor.execute(create_return_curves_sql)
+            cursor.execute(create_decile_curves_sql)
             # 尝试补列（已存在时 SQLite 会报错，忽略即可）
             for alter_sql in new_columns:
                 try:
@@ -217,7 +233,7 @@ class DatabaseStorage:
         for key, value in result.items():
             if key in ('factor_name', 'factor_params', 'forward_period',
                        'ic_metrics', 'risk_adjusted_metrics', 'risk_metrics',
-                       'daily_returns'):
+                       'daily_returns', 'decile_daily_returns'):
                 continue
             other_metrics[key] = value
         
@@ -287,6 +303,41 @@ class DatabaseStorage:
                    VALUES (?, ?, ?, ?, ?, ?, ?)""",
                 (result_id, expression_name, neutralization_method or 'raw',
                  top_k, rebalance_freq, dates_json, returns_json),
+            )
+
+    def _save_decile_return_curves(
+        self,
+        conn,
+        result_id: int,
+        expression_name: str,
+        result: Dict[str, Any],
+    ):
+        """
+        Save decile daily return curves to factor_decile_return_curves table.
+
+        Extracts 'decile_daily_returns' (Dict[int, pd.Series]) from result dict.
+        Silently skips if not present.
+        """
+        decile_returns = result.get('decile_daily_returns')
+        if not decile_returns:
+            return
+        # Loop: n_groups 次 (典型 10)
+        for decile, series in decile_returns.items():
+            if not isinstance(series, pd.Series) or len(series) == 0:
+                continue
+            dates_json = json.dumps(
+                [d.strftime('%Y-%m-%d') for d in series.index],
+                ensure_ascii=False,
+            )
+            returns_json = json.dumps(
+                [round(float(v), 8) for v in series.values],
+                ensure_ascii=False,
+            )
+            conn.execute(
+                """INSERT INTO factor_decile_return_curves
+                   (result_id, expression_name, decile, dates, daily_returns)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (result_id, expression_name, int(decile), dates_json, returns_json),
             )
 
     def save_evaluation_result(
@@ -411,6 +462,10 @@ class DatabaseStorage:
                 neutralization_method=neutralization_method_val,
                 top_k=top_k_val,
                 rebalance_freq=rebalance_freq_val,
+            )
+            # Save decile return curves (same transaction)
+            self._save_decile_return_curves(
+                conn, record_id, expression_name, result,
             )
             conn.commit()
             return record_id

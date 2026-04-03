@@ -51,7 +51,7 @@ class ROA(FundamentalFactorCalculator):
     def params(self) -> dict:
         return {"field": FIELD, "direction": FACTOR_DIRECTION}
 
-    def calculate(self, fundamental_data: FundamentalData) -> FactorData:
+    def calculate(self, fundamental_data: FundamentalData, pricevol_data=None) -> FactorData:
         """
         计算 ROA 因子日频面板
 

@@ -258,7 +258,7 @@ class ACCEL(FundamentalFactorCalculator):
             "min_abs_denom": MIN_ABS_DENOM,
         }
 
-    def calculate(self, fundamental_data: FundamentalData) -> FactorData:
+    def calculate(self, fundamental_data: FundamentalData, pricevol_data=None) -> FactorData:
         """
         Compute ACCEL daily panel (N stocks x T_days).
 

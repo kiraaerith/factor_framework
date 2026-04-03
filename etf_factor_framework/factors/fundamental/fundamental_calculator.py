@@ -68,12 +68,13 @@ class FundamentalFactorCalculator(ABC):
         pass
 
     @abstractmethod
-    def calculate(self, fundamental_data: FundamentalData) -> FactorData:
+    def calculate(self, fundamental_data: FundamentalData, pricevol_data=None) -> FactorData:
         """
         计算因子值
 
         Args:
             fundamental_data: FundamentalData 数据容器
+            pricevol_data: PriceVolData 量价数据容器（量价类因子使用，基本面因子可忽略）
 
         Returns:
             FactorData: 日频因子面板 (N股 × T日)，index=symbol，columns=交易日

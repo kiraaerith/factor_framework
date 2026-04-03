@@ -139,7 +139,7 @@ class ARGrowthVsRev(FundamentalFactorCalculator):
     # Main calculation
     # ------------------------------------------------------------------
 
-    def calculate(self, fundamental_data: FundamentalData) -> FactorData:
+    def calculate(self, fundamental_data: FundamentalData, pricevol_data=None) -> FactorData:
         """
         计算 AR_GROWTH_VS_REV 日频面板。
 

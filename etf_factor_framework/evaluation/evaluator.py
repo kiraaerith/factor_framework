@@ -537,6 +537,90 @@ class FactorEvaluator:
         )
         return calculator.get_all_metrics()
 
+    def calculate_decile_returns(self, n_groups: int = 10) -> Dict[int, pd.Series]:
+        """
+        计算十分位（或任意 n 分位）日频等权组合收益
+
+        按因子值将股票等分为 n_groups 组，每组计算等权日收益序列。
+        遵循与主策略相同的 rebalance_freq 和 delay。
+        不计交易成本（用于因子区分度评估）。
+
+        Args:
+            n_groups: 分组数，默认 10
+
+        Returns:
+            dict: key=分组编号(0=因子值最低, n_groups-1=最高),
+                  value=pd.Series(日收益率, index=DatetimeIndex)
+        """
+        N, T = self.aligned_factor_values.shape
+
+        # ── 1. 确定调仓日 ─────────────────────────────────────────────
+        rb_freq = max(1, self.rebalance_freq)
+        rebalance_day_indices = np.arange(0, T, rb_freq)
+        n_rb = len(rebalance_day_indices)
+
+        # ── 2. 在每个调仓日分组 ───────────────────────────────────────
+        # decile_at_rb: (N, n_rb)，值 0..n_groups-1 或 NaN
+        decile_at_rb = np.full((N, n_rb), np.nan, dtype=np.float64)
+        # Loop: ~n_rb 次 (典型 400-800)，每次 argsort ~N(5000) 元素
+        for i, rb_idx in enumerate(rebalance_day_indices):
+            factor_col = self.aligned_factor_values[:, rb_idx]
+            valid_mask = ~np.isnan(factor_col)
+            n_valid = int(valid_mask.sum())
+            if n_valid < n_groups:
+                continue
+            # argsort 等分：按因子值排名，均匀分配到 n_groups 组
+            valid_values = factor_col[valid_mask]
+            ranks = np.argsort(np.argsort(valid_values))  # 0-based rank
+            deciles = np.minimum(ranks * n_groups // n_valid, n_groups - 1)
+            decile_at_rb[valid_mask, i] = deciles
+
+        # ── 3. 将调仓日分组传播到所有日期 (searchsorted) ──────────────
+        t_indices = np.arange(T)
+        rb_pos = np.searchsorted(rebalance_day_indices, t_indices, side='right') - 1
+        rb_pos = np.clip(rb_pos, 0, n_rb - 1)
+        decile_assignment = decile_at_rb[:, rb_pos]  # (N, T)
+
+        # ── 4. 应用 delay ────────────────────────────────────────────
+        if self.delay > 0:
+            shifted = np.full_like(decile_assignment, np.nan)
+            shifted[:, self.delay:] = decile_assignment[:, :-self.delay]
+            decile_assignment = shifted
+
+        # ── 5. 收益率调整（与主策略一致）──────────────────────────────
+        adj_returns = self.aligned_returns.copy()
+        if self.aligned_trade_context is not None:
+            adj_returns = self.aligned_trade_context.adjust_returns(adj_returns)
+            # 退市后收益设为 NaN（不参与分组收益计算）
+            is_delist = (adj_returns == -1.0)
+            ever_delisted = np.cumsum(is_delist, axis=1) > 0
+            post_delist = np.zeros_like(ever_delisted, dtype=bool)
+            post_delist[:, 1:] = ever_delisted[:, :-1]
+            adj_returns[post_delist] = np.nan
+
+        # ── 6. 计算每组日收益 ────────────────────────────────────────
+        # valid_mask: 与主策略保持一致的有效日期
+        all_returns_nan = np.all(np.isnan(self.aligned_returns), axis=0)
+        has_assignment = np.any(~np.isnan(decile_assignment), axis=0)
+        valid_mask = has_assignment & ~all_returns_nan
+        valid_dates = self.common_dates[valid_mask]
+
+        decile_results = {}
+        # Loop: n_groups 次 (10)
+        import warnings
+        for d in range(n_groups):
+            in_decile = (decile_assignment == d)  # (N, T) bool
+            masked = np.where(in_decile, adj_returns, np.nan)
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", RuntimeWarning)
+                daily_ret = np.nanmean(masked, axis=0)  # (T,)
+            daily_ret = daily_ret[valid_mask]
+            decile_results[d] = pd.Series(
+                daily_ret, index=pd.DatetimeIndex(valid_dates)
+            )
+
+        return decile_results
+
     def run_full_evaluation(self) -> Dict[str, Any]:
         """
         运行完整评估
@@ -562,6 +646,9 @@ class FactorEvaluator:
             results['turnover_metrics'] = self.calculate_turnover_metrics()
             # 日频净收益曲线（pd.Series, index=DatetimeIndex）
             results['daily_returns'] = self.net_portfolio_returns
+
+        # 十分位日频收益曲线
+        results['decile_daily_returns'] = self.calculate_decile_returns()
 
         # 计算各基准的超额收益指标
         if self.benchmark_returns and self.portfolio_returns is not None:

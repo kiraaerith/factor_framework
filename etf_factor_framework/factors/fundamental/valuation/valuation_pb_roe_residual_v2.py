@@ -78,7 +78,7 @@ class PB_ROE_Residual_V2(FundamentalFactorCalculator):
     def params(self) -> dict:
         return {"direction": FACTOR_DIRECTION}
 
-    def calculate(self, fundamental_data: FundamentalData) -> FactorData:
+    def calculate(self, fundamental_data: FundamentalData, pricevol_data=None) -> FactorData:
         # --- 1. Load panels ---
         pb_vals, pb_syms, pb_dates = fundamental_data.get_valuation_panel("pb")
         roe_vals, roe_syms, roe_dates = fundamental_data.get_daily_panel("q_m_wroe_t")

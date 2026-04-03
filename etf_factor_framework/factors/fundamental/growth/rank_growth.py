@@ -111,7 +111,7 @@ class RANK_GROWTH(FundamentalFactorCalculator):
     def params(self) -> dict:
         return {"direction": FACTOR_DIRECTION, "field": self.field, "T": self.T}
 
-    def calculate(self, fundamental_data: FundamentalData) -> FactorData:
+    def calculate(self, fundamental_data: FundamentalData, pricevol_data=None) -> FactorData:
         """
         Compute RANK_GROWTH daily panel (N stocks x T_days).
 

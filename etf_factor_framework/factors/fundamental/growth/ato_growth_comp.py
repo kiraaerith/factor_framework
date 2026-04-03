@@ -92,7 +92,7 @@ class ATO_GROWTH_COMP(FundamentalFactorCalculator):
     # Main entry point
     # ------------------------------------------------------------------
 
-    def calculate(self, fundamental_data: FundamentalData) -> FactorData:
+    def calculate(self, fundamental_data: FundamentalData, pricevol_data=None) -> FactorData:
         """
         Compute ATO_GROWTH_COMP daily panel (N stocks x T days).
 

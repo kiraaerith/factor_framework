@@ -99,7 +99,7 @@ class NetDebtToEquity(FundamentalFactorCalculator):
     # Main calculation
     # ------------------------------------------------------------------
 
-    def calculate(self, fundamental_data: FundamentalData) -> FactorData:
+    def calculate(self, fundamental_data: FundamentalData, pricevol_data=None) -> FactorData:
         """
         计算净债务/净资产日频面板。
 

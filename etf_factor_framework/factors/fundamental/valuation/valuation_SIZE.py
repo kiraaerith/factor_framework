@@ -69,7 +69,7 @@ class valuation_SIZE(FundamentalFactorCalculator):
     def params(self) -> dict:
         return {"field": FIELD, "direction": FACTOR_DIRECTION}
 
-    def calculate(self, fundamental_data: FundamentalData) -> FactorData:
+    def calculate(self, fundamental_data: FundamentalData, pricevol_data=None) -> FactorData:
         """
         Compute SIZE = ln(mc) daily panel.
 

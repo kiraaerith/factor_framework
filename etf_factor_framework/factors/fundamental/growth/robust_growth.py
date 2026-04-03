@@ -273,7 +273,7 @@ class ROBUST_GROWTH(FundamentalFactorCalculator):
             "windows": ROBUST_WINDOWS,
         }
 
-    def calculate(self, fundamental_data: FundamentalData) -> FactorData:
+    def calculate(self, fundamental_data: FundamentalData, pricevol_data=None) -> FactorData:
         """
         Compute ROBUST_GROWTH daily panel (N stocks x T_days).
 
